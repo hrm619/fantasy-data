@@ -1,0 +1,226 @@
+[
+  {
+    "team": "ARI", "season": 2024,
+    "head_coach": "Jonathan Gannon", "offensive_coordinator": "Drew Petzing",
+    "hc_year_with_team": 2, "oc_year_with_team": 2,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "OTHER"
+  },
+  {
+    "team": "ATL", "season": 2024,
+    "head_coach": "Raheem Morris", "offensive_coordinator": "Zac Robinson",
+    "hc_year_with_team": 1, "oc_year_with_team": 2,
+    "hc_continuity_flag": 0, "oc_continuity_flag": 1,
+    "system_tag": "SHANAHAN_ZONE"
+  },
+  {
+    "team": "BAL", "season": 2024,
+    "head_coach": "John Harbaugh", "offensive_coordinator": "Todd Monken",
+    "hc_year_with_team": 17, "oc_year_with_team": 2,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "OTHER"
+  },
+  {
+    "team": "BUF", "season": 2024,
+    "head_coach": "Sean McDermott", "offensive_coordinator": "Joe Brady",
+    "hc_year_with_team": 8, "oc_year_with_team": 2,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "OTHER"
+  },
+  {
+    "team": "CAR", "season": 2024,
+    "head_coach": "Dave Canales", "offensive_coordinator": "Brad Idzik",
+    "hc_year_with_team": 1, "oc_year_with_team": 1,
+    "hc_continuity_flag": 0, "oc_continuity_flag": 0,
+    "system_tag": "MCVAY_TREE"
+  },
+  {
+    "team": "CHI", "season": 2024,
+    "head_coach": "Matt Eberflus", "offensive_coordinator": "Shane Waldron",
+    "hc_year_with_team": 3, "oc_year_with_team": 1,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 0,
+    "system_tag": "MCVAY_TREE"
+  },
+  {
+    "team": "CIN", "season": 2024,
+    "head_coach": "Zac Taylor", "offensive_coordinator": "Dan Pitcher",
+    "hc_year_with_team": 6, "oc_year_with_team": 1,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 0,
+    "system_tag": "MCVAY_TREE"
+  },
+  {
+    "team": "CLE", "season": 2024,
+    "head_coach": "Kevin Stefanski", "offensive_coordinator": "Ken Dorsey",
+    "hc_year_with_team": 5, "oc_year_with_team": 1,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 0,
+    "system_tag": "SHANAHAN_ZONE"
+  },
+  {
+    "team": "DAL", "season": 2024,
+    "head_coach": "Mike McCarthy", "offensive_coordinator": "Brian Schottenheimer",
+    "hc_year_with_team": 5, "oc_year_with_team": 2,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "REID_WEST_COAST"
+  },
+  {
+    "team": "DEN", "season": 2024,
+    "head_coach": "Sean Payton", "offensive_coordinator": "Joe Lombardi",
+    "hc_year_with_team": 2, "oc_year_with_team": 2,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "OTHER"
+  },
+  {
+    "team": "DET", "season": 2024,
+    "head_coach": "Dan Campbell", "offensive_coordinator": "Ben Johnson",
+    "hc_year_with_team": 4, "oc_year_with_team": 3,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "OTHER"
+  },
+  {
+    "team": "GB", "season": 2024,
+    "head_coach": "Matt LaFleur", "offensive_coordinator": "Adam Stenavich",
+    "hc_year_with_team": 6, "oc_year_with_team": 3,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "SHANAHAN_ZONE"
+  },
+  {
+    "team": "HOU", "season": 2024,
+    "head_coach": "DeMeco Ryans", "offensive_coordinator": "Bobby Slowik",
+    "hc_year_with_team": 2, "oc_year_with_team": 2,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "SHANAHAN_ZONE"
+  },
+  {
+    "team": "IND", "season": 2024,
+    "head_coach": "Shane Steichen", "offensive_coordinator": "Jim Bob Cooter",
+    "hc_year_with_team": 2, "oc_year_with_team": 2,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "REID_WEST_COAST"
+  },
+  {
+    "team": "JAX", "season": 2024,
+    "head_coach": "Doug Pederson", "offensive_coordinator": "Press Taylor",
+    "hc_year_with_team": 3, "oc_year_with_team": 3,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "REID_WEST_COAST"
+  },
+  {
+    "team": "KC", "season": 2024,
+    "head_coach": "Andy Reid", "offensive_coordinator": "Matt Nagy",
+    "hc_year_with_team": 12, "oc_year_with_team": 1,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 0,
+    "system_tag": "REID_WEST_COAST"
+  },
+  {
+    "team": "LAC", "season": 2024,
+    "head_coach": "Jim Harbaugh", "offensive_coordinator": "Greg Roman",
+    "hc_year_with_team": 1, "oc_year_with_team": 1,
+    "hc_continuity_flag": 0, "oc_continuity_flag": 0,
+    "system_tag": "OTHER"
+  },
+  {
+    "team": "LAR", "season": 2024,
+    "head_coach": "Sean McVay", "offensive_coordinator": "Mike LaFleur",
+    "hc_year_with_team": 8, "oc_year_with_team": 1,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 0,
+    "system_tag": "MCVAY_TREE"
+  },
+  {
+    "team": "LV", "season": 2024,
+    "head_coach": "Antonio Pierce", "offensive_coordinator": "Luke Getsy",
+    "hc_year_with_team": 1, "oc_year_with_team": 1,
+    "hc_continuity_flag": 0, "oc_continuity_flag": 0,
+    "system_tag": "OTHER"
+  },
+  {
+    "team": "MIA", "season": 2024,
+    "head_coach": "Mike McDaniel", "offensive_coordinator": "Frank Smith",
+    "hc_year_with_team": 3, "oc_year_with_team": 3,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "SHANAHAN_ZONE"
+  },
+  {
+    "team": "MIN", "season": 2024,
+    "head_coach": "Kevin O'Connell", "offensive_coordinator": "Wes Phillips",
+    "hc_year_with_team": 3, "oc_year_with_team": 3,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "MCVAY_TREE"
+  },
+  {
+    "team": "NE", "season": 2024,
+    "head_coach": "Jerod Mayo", "offensive_coordinator": "Alex Van Pelt",
+    "hc_year_with_team": 1, "oc_year_with_team": 1,
+    "hc_continuity_flag": 0, "oc_continuity_flag": 0,
+    "system_tag": "OTHER"
+  },
+  {
+    "team": "NO", "season": 2024,
+    "head_coach": "Dennis Allen", "offensive_coordinator": "Klint Kubiak",
+    "hc_year_with_team": 3, "oc_year_with_team": 2,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "SHANAHAN_ZONE"
+  },
+  {
+    "team": "NYG", "season": 2024,
+    "head_coach": "Brian Daboll", "offensive_coordinator": "Mike Kafka",
+    "hc_year_with_team": 3, "oc_year_with_team": 3,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "OTHER"
+  },
+  {
+    "team": "NYJ", "season": 2024,
+    "head_coach": "Robert Saleh", "offensive_coordinator": "Nathaniel Hackett",
+    "hc_year_with_team": 4, "oc_year_with_team": 2,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "SHANAHAN_ZONE"
+  },
+  {
+    "team": "PHI", "season": 2024,
+    "head_coach": "Nick Sirianni", "offensive_coordinator": "Kellen Moore",
+    "hc_year_with_team": 4, "oc_year_with_team": 1,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 0,
+    "system_tag": "REID_WEST_COAST"
+  },
+  {
+    "team": "PIT", "season": 2024,
+    "head_coach": "Mike Tomlin", "offensive_coordinator": "Arthur Smith",
+    "hc_year_with_team": 18, "oc_year_with_team": 1,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 0,
+    "system_tag": "SHANAHAN_ZONE"
+  },
+  {
+    "team": "SEA", "season": 2024,
+    "head_coach": "Mike Macdonald", "offensive_coordinator": "Ryan Grubb",
+    "hc_year_with_team": 1, "oc_year_with_team": 1,
+    "hc_continuity_flag": 0, "oc_continuity_flag": 0,
+    "system_tag": "OTHER"
+  },
+  {
+    "team": "SF", "season": 2024,
+    "head_coach": "Kyle Shanahan", "offensive_coordinator": "Kyle Shanahan",
+    "hc_year_with_team": 8, "oc_year_with_team": 8,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "SHANAHAN_ZONE"
+  },
+  {
+    "team": "TB", "season": 2024,
+    "head_coach": "Todd Bowles", "offensive_coordinator": "Liam Coen",
+    "hc_year_with_team": 3, "oc_year_with_team": 2,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "system_tag": "MCVAY_TREE"
+  },
+  {
+    "team": "TEN", "season": 2024,
+    "head_coach": "Brian Callahan", "offensive_coordinator": "Nick Holz",
+    "hc_year_with_team": 1, "oc_year_with_team": 1,
+    "hc_continuity_flag": 0, "oc_continuity_flag": 0,
+    "system_tag": "MCVAY_TREE"
+  },
+  {
+    "team": "WAS", "season": 2024,
+    "head_coach": "Dan Quinn", "offensive_coordinator": "Kliff Kingsbury",
+    "hc_year_with_team": 1, "oc_year_with_team": 1,
+    "hc_continuity_flag": 0, "oc_continuity_flag": 0,
+    "system_tag": "AIR_RAID"
+  }
+]

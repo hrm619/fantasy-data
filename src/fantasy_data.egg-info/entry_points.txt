@@ -1,0 +1,2 @@
+[console_scripts]
+fantasy-data = fantasy_data.cli:cli

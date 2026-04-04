@@ -40,7 +40,8 @@ class Player(Base):
 
     __tablename__ = "players"
 
-    player_id = Column(String, primary_key=True)  # PFF player ID (canonical)
+    player_id = Column(String, primary_key=True)  # Pipeline PLAYER ID (e.g., McCaCh01)
+    pff_id = Column(String)  # PFF player ID (secondary, for grade joins)
     gsis_id = Column(String)
     sleeper_id = Column(String)
     full_name = Column(String, nullable=False)
@@ -325,37 +326,3 @@ class QualitativeSignal(Base):
     )
 
 
-# ---------------------------------------------------------------------------
-# Pipeline Integration
-# ---------------------------------------------------------------------------
-
-
-class PipelineIdMap(Base):
-    """Bridge table: fantasy_data_pipeline PLAYER ID ↔ PFF player_id."""
-
-    __tablename__ = "pipeline_id_map"
-
-    pipeline_player_id = Column(String, primary_key=True)
-    player_id = Column(String, ForeignKey("players.player_id"))
-    match_method = Column(String)  # exact, normalized, manual
-    match_confidence = Column(Float)
-    created_at = Column(String, default=_now_iso)
-
-    __table_args__ = (
-        Index("ix_pipeline_map_player", "player_id"),
-    )
-
-
-class UnmatchedPlayer(Base):
-    """Players from the rankings pipeline that couldn't be matched to PFF IDs."""
-
-    __tablename__ = "unmatched_players"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    pipeline_player_id = Column(String, nullable=False)
-    player_name = Column(String, nullable=False)
-    position = Column(String)
-    team = Column(String)
-    source = Column(String)  # which ingest run produced this
-    resolved_flag = Column(Integer, default=0)
-    created_at = Column(String, default=_now_iso)

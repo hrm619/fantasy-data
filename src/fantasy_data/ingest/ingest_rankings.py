@@ -1,17 +1,17 @@
 """Ingest rankings from fantasy_data_pipeline into player_season_baseline.
 
 Wraps RankingsProcessor, maps output columns to the baseline schema,
-and computes sharp_consensus_rank from the 4 sharp sources.
+computes sharp_consensus_rank from the 4 sharp sources, and creates
+Player records directly (pipeline PLAYER ID is the canonical ID).
 """
 
 from datetime import datetime, timezone
 
-import numpy as np
 import pandas as pd
 from sqlalchemy.orm import Session
 
-from fantasy_data.models import PlayerSeasonBaseline
-from fantasy_data.ingest.pipeline_id_map import resolve_player_id
+from fantasy_data.models import Player, PlayerSeasonBaseline
+from fantasy_data.standardize import standardize_team
 
 # Sharp sources used for sharp_consensus_rank (equal-weighted mean)
 SHARP_SOURCES = ["fpts", "jj", "hw", "pff"]
@@ -68,6 +68,9 @@ def ingest_rankings(
 ) -> dict[str, int]:
     """Ingest a rankings DataFrame into player_season_baseline.
 
+    Creates Player records directly from the pipeline output — the pipeline's
+    PLAYER ID (e.g., McCaCh01) is the canonical player_id.
+
     Args:
         session: SQLAlchemy session.
         df: DataFrame from RankingsProcessor.process_rankings(return_dataframe=True).
@@ -76,44 +79,52 @@ def ingest_rankings(
         verbose: Print progress info.
 
     Returns:
-        Dict with counts: matched, unmatched, updated.
+        Dict with counts: created, existing, skipped, updated.
     """
     now_iso = datetime.now(timezone.utc).isoformat()
-    stats = {"matched": 0, "unmatched": 0, "updated": 0}
+    stats = {"created": 0, "existing": 0, "skipped": 0, "updated": 0}
 
     for _, row in df.iterrows():
+        player_id = row.get("PLAYER ID")
         player_name = row.get("PLAYER NAME", "")
-        pipeline_id = row.get("PLAYER ID")
         position = row.get("POS", "")
         team = row.get("TEAM", "")
 
-        if pd.isna(pipeline_id) or not pipeline_id:
-            stats["unmatched"] += 1
+        if pd.isna(player_id) or not player_id:
+            stats["skipped"] += 1
             continue
 
-        # Resolve to PFF player_id
-        player_id = resolve_player_id(
-            session, str(pipeline_id), str(player_name),
-            position=str(position), team=str(team),
-        )
+        player_id = str(player_id)
+        team = standardize_team(str(team)) if pd.notna(team) else None
 
-        if not player_id:
-            stats["unmatched"] += 1
-            if verbose:
-                print(f"  UNMATCHED: {player_name} ({pipeline_id})")
-            continue
-
-        stats["matched"] += 1
-        baseline_id = f"{player_id}_{season}"
+        # Create or update Player record
+        player = session.get(Player, player_id)
+        if not player:
+            player = Player(
+                player_id=player_id,
+                full_name=str(player_name),
+                position=str(position),
+                team=team,
+                created_at=now_iso,
+            )
+            session.add(player)
+            stats["created"] += 1
+        else:
+            # Update team if changed
+            if team:
+                player.team = team
+            player.updated_at = now_iso
+            stats["existing"] += 1
 
         # Get or create baseline record
+        baseline_id = f"{player_id}_{season}"
         baseline = session.get(PlayerSeasonBaseline, baseline_id)
         if not baseline:
             baseline = PlayerSeasonBaseline(
                 baseline_id=baseline_id,
                 player_id=player_id,
                 season=season,
-                team=str(team) if pd.notna(team) else None,
+                team=team,
             )
             session.add(baseline)
 
@@ -144,8 +155,9 @@ def ingest_rankings(
     session.commit()
 
     if verbose:
-        print(f"Rankings ingest complete: {stats['matched']} matched, "
-              f"{stats['unmatched']} unmatched, {stats['updated']} updated")
+        print(f"Rankings ingest: {stats['created']} players created, "
+              f"{stats['existing']} existing, {stats['skipped']} skipped, "
+              f"{stats['updated']} baselines updated")
 
     return stats
 
@@ -176,7 +188,7 @@ def run_rankings_pipeline(
     if not isinstance(df, pd.DataFrame):
         raise RuntimeError(
             f"Expected DataFrame from process_rankings, got {type(df)}. "
-            "Ensure fantasy-data-pipeline is up to date."
+            "Ensure fantasy-pipeline is up to date."
         )
 
     return ingest_rankings(session, df, season, league_type, verbose)

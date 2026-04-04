@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 from fantasy_data.models import (
-    Base, Player, CoachingStaff, PlayerSeasonBaseline, PipelineIdMap,
+    Base, Player, CoachingStaff, PlayerSeasonBaseline,
 )
 
 
@@ -36,34 +36,34 @@ def session(engine):
 
 @pytest.fixture
 def seed_players(session):
-    """Seed the players table with test data."""
+    """Seed the players table with pipeline-style PLAYER IDs."""
     players = [
         Player(
-            player_id="PFF001", full_name="Patrick Mahomes",
+            player_id="MahomPa01", full_name="Patrick Mahomes",
             position="QB", team="KC", age=28.5, years_pro=7,
             draft_year=2017, draft_round=1, draft_pick=10,
             rookie_flag=0, team_change_flag=0, injury_concern_flag=0,
         ),
         Player(
-            player_id="PFF002", full_name="Tyreek Hill",
+            player_id="HillTy01", full_name="Tyreek Hill",
             position="WR", team="MIA", age=30.0, years_pro=8,
             draft_year=2016, draft_round=5, draft_pick=165,
             rookie_flag=0, team_change_flag=0, injury_concern_flag=0,
         ),
         Player(
-            player_id="PFF003", full_name="Ja'Marr Chase",
+            player_id="ChasJa01", full_name="Ja'Marr Chase",
             position="WR", team="CIN", age=24.0, years_pro=3,
             draft_year=2021, draft_round=1, draft_pick=5,
             rookie_flag=0, team_change_flag=0, injury_concern_flag=0,
         ),
         Player(
-            player_id="PFF004", full_name="Bijan Robinson",
+            player_id="RobiBi01", full_name="Bijan Robinson",
             position="RB", team="ATL", age=22.0, years_pro=2,
             draft_year=2023, draft_round=1, draft_pick=8,
             rookie_flag=0, team_change_flag=0, injury_concern_flag=0,
         ),
         Player(
-            player_id="PFF005", full_name="Caleb Williams",
+            player_id="WillCa01", full_name="Caleb Williams",
             position="QB", team="CHI", age=22.0, years_pro=1,
             draft_year=2024, draft_round=1, draft_pick=1,
             rookie_flag=1, team_change_flag=1, injury_concern_flag=0,
@@ -124,7 +124,7 @@ def seed_baselines(session, seed_players):
     """Seed player_season_baseline with test data."""
     baselines = [
         PlayerSeasonBaseline(
-            baseline_id="PFF001_2024", player_id="PFF001", season=2024,
+            baseline_id="MahomPa01_2024", player_id="MahomPa01", season=2024,
             team="KC", games_played=17,
             snap_share=0.98, target_share=0.0, air_yards_share=0.0,
             fantasy_pts_ppr=350.0, fpts_per_game_ppr=20.6,
@@ -134,7 +134,7 @@ def seed_baselines(session, seed_players):
             rankings_ds_positional=1, rankings_source_count=5,
         ),
         PlayerSeasonBaseline(
-            baseline_id="PFF002_2024", player_id="PFF002", season=2024,
+            baseline_id="HillTy01_2024", player_id="HillTy01", season=2024,
             team="MIA", games_played=16,
             snap_share=0.92, target_share=0.28, air_yards_share=0.35,
             fantasy_pts_ppr=280.0, fpts_per_game_ppr=17.5,
@@ -144,7 +144,7 @@ def seed_baselines(session, seed_players):
             rankings_ds_positional=8, rankings_source_count=5,
         ),
         PlayerSeasonBaseline(
-            baseline_id="PFF003_2024", player_id="PFF003", season=2024,
+            baseline_id="ChasJa01_2024", player_id="ChasJa01", season=2024,
             team="CIN", games_played=17,
             snap_share=0.95, target_share=0.30, air_yards_share=0.38,
             fantasy_pts_ppr=310.0, fpts_per_game_ppr=18.2,
@@ -154,7 +154,7 @@ def seed_baselines(session, seed_players):
             rankings_ds_positional=2, rankings_source_count=5,
         ),
         PlayerSeasonBaseline(
-            baseline_id="PFF004_2024", player_id="PFF004", season=2024,
+            baseline_id="RobiBi01_2024", player_id="RobiBi01", season=2024,
             team="ATL", games_played=17,
             snap_share=0.82, target_share=0.10, carries_per_game=18.5,
             fantasy_pts_ppr=290.0, fpts_per_game_ppr=17.1,
@@ -164,7 +164,7 @@ def seed_baselines(session, seed_players):
             rankings_ds_positional=3, rankings_source_count=5,
         ),
         PlayerSeasonBaseline(
-            baseline_id="PFF005_2024", player_id="PFF005", season=2024,
+            baseline_id="WillCa01_2024", player_id="WillCa01", season=2024,
             team="CHI", games_played=17,
             snap_share=0.99,
             adp_consensus=45.0, adp_positional_rank=8,
@@ -182,10 +182,10 @@ def seed_baselines(session, seed_players):
 def sample_rankings_df():
     """Sample DataFrame mimicking RankingsProcessor output."""
     return pd.DataFrame({
-        "PLAYER NAME": ["Patrick Mahomes", "Tyreek Hill", "Unknown Guy"],
-        "PLAYER ID": ["MahomPa01", "HillTy01", "UnknGu01"],
+        "PLAYER NAME": ["Patrick Mahomes", "Tyreek Hill", "New Player"],
+        "PLAYER ID": ["MahomPa01", "HillTy01", "NewPPl01"],
         "POS": ["QB", "WR", "RB"],
-        "TEAM": ["KC", "MIA", "???"],
+        "TEAM": ["KC", "MIA", "DAL"],
         "avg_RK": [2.0, 12.0, 50.0],
         "avg_POS RANK": [1.0, 4.0, 25.0],
         "fpts_POS RANK": [1, 3, None],
@@ -203,18 +203,18 @@ def sample_rankings_df():
 
 @pytest.fixture
 def sample_pff_df():
-    """Sample DataFrame mimicking PFF CSV export."""
+    """Sample DataFrame mimicking PFF CSV export — players must already exist."""
     return pd.DataFrame({
-        "player_id": ["PFF010", "PFF011"],
-        "player": ["Test Player One", "Test Player Two"],
-        "position": ["WR", "RB"],
-        "team_abbr": ["DAL", "SF"],
-        "jersey_number": [88, 23],
-        "age": [25.0, 27.0],
-        "years_exp": [3, 5],
-        "receiving_grade": [85.5, None],
-        "route_grade": [82.0, None],
-        "rushing_grade": [None, 78.3],
-        "games": [17, 15],
-        "games_started": [17, 14],
+        "player_id": ["PFF_EXT_001", "PFF_EXT_002"],
+        "player": ["Patrick Mahomes", "Tyreek Hill"],
+        "position": ["QB", "WR"],
+        "team_abbr": ["KC", "MIA"],
+        "jersey_number": [15, 10],
+        "age": [28.5, 30.0],
+        "years_exp": [7, 8],
+        "receiving_grade": [None, 85.5],
+        "route_grade": [None, 82.0],
+        "rushing_grade": [None, None],
+        "games": [17, 16],
+        "games_started": [17, 16],
     })

@@ -33,16 +33,23 @@ def cmd_seed_coaching(file_path):
     with open(file_path) as f:
         data = json.load(f)
 
+    from fantasy_data.standardize import standardize_team, standardize_coach_name
+
     session = get_session()
     try:
         for entry in data:
+            entry["team"] = standardize_team(entry["team"])
+            entry["head_coach"] = standardize_coach_name(entry.get("head_coach"))
+            entry["offensive_coordinator"] = standardize_coach_name(entry.get("offensive_coordinator"))
+            entry["quarterbacks_coach"] = standardize_coach_name(entry.get("quarterbacks_coach"))
             staff_id = f"{entry['team']}_{entry['season']}"
             staff = session.get(CoachingStaff, staff_id)
             if not staff:
                 staff = CoachingStaff(staff_id=staff_id)
                 session.add(staff)
             for key, val in entry.items():
-                setattr(staff, key, val)
+                if val is not None:
+                    setattr(staff, key, val)
         session.commit()
         click.echo(f"Seeded {len(data)} coaching staff records.")
     finally:
@@ -82,15 +89,14 @@ def cmd_ingest_rankings(league_type, season, data_path):
 @click.option("--file", "file_path", required=True, help="Path to PFF CSV export.")
 @click.option("--season", required=True, type=int, help="NFL season year.")
 def cmd_ingest_pff(file_path, season):
-    """Ingest PFF data into players + player_season_baseline."""
+    """Enrich existing players with PFF grades and biographical data."""
     import pandas as pd
-    from fantasy_data.ingest.ingest_pff import ingest_pff_players, ingest_pff_grades
+    from fantasy_data.ingest.ingest_pff import ingest_pff
 
     df = pd.read_csv(file_path)
     session = get_session()
     try:
-        ingest_pff_players(session, df, season)
-        ingest_pff_grades(session, df, season)
+        ingest_pff(session, df, season)
     finally:
         session.close()
 
@@ -187,13 +193,23 @@ def report_group():
 @click.option("--season", required=True, type=int)
 @click.option("--position", default=None, help="Filter by position (QB, RB, WR, TE, all).")
 @click.option("--threshold", default=12, type=int, help="Minimum divergence to display.")
-def cmd_report_divergence(season, position, threshold):
+@click.option("--plot", is_flag=True, default=False, help="Save interactive HTML chart.")
+@click.option("--output-dir", default=".", show_default=True)
+def cmd_report_divergence(season, position, threshold, plot, output_dir):
     """Show players where sharp consensus disagrees with ADP."""
-    from fantasy_data.reports.adp_divergence import print_adp_divergence
+    from fantasy_data.reports.adp_divergence import get_adp_divergence, print_adp_divergence
 
     session = get_session()
     try:
         print_adp_divergence(session, season, position, threshold)
+        if plot:
+            from fantasy_data.viz.adp_divergence import plot_adp_divergence
+            results = get_adp_divergence(session, season, position, threshold)
+            pos_label = (position or "all").lower()
+            fig = plot_adp_divergence(results, season, pos_label.upper())
+            out_path = f"{output_dir}/adp_divergence_{season}_{pos_label}.html"
+            fig.write_html(out_path)
+            click.echo(f"Chart saved to {out_path}")
     finally:
         session.close()
 
@@ -201,13 +217,23 @@ def cmd_report_divergence(season, position, threshold):
 @report_group.command("rankings")
 @click.option("--player-id", required=True, help="PFF player ID.")
 @click.option("--season", required=True, type=int)
-def cmd_report_rankings(player_id, season):
+@click.option("--plot", is_flag=True, default=False, help="Save interactive HTML chart.")
+@click.option("--output-dir", default=".", show_default=True)
+def cmd_report_rankings(player_id, season, plot, output_dir):
     """Show per-source positional rank breakdown for a player."""
-    from fantasy_data.reports.rankings import print_player_rankings
+    from fantasy_data.reports.rankings import get_player_rankings, print_player_rankings
 
     session = get_session()
     try:
         print_player_rankings(session, player_id, season)
+        if plot:
+            from fantasy_data.viz.player_profile import plot_player_source_breakdown
+            data = get_player_rankings(session, player_id, season)
+            if data:
+                fig = plot_player_source_breakdown(data)
+                out_path = f"{output_dir}/player_rankings_{player_id}_{season}.html"
+                fig.write_html(out_path)
+                click.echo(f"Chart saved to {out_path}")
     finally:
         session.close()
 
@@ -216,13 +242,23 @@ def cmd_report_rankings(player_id, season):
 @click.option("--season", required=True, type=int)
 @click.option("--position", default=None, help="Filter by position.")
 @click.option("--min-sources", default=3, type=int, help="Minimum sources required.")
-def cmd_report_variance(season, position, min_sources):
+@click.option("--plot", is_flag=True, default=False, help="Save interactive HTML chart.")
+@click.option("--output-dir", default=".", show_default=True)
+def cmd_report_variance(season, position, min_sources, plot, output_dir):
     """Show players with highest cross-source ranking disagreement."""
-    from fantasy_data.reports.rankings_variance import print_rankings_variance
+    from fantasy_data.reports.rankings_variance import get_rankings_variance, print_rankings_variance
 
     session = get_session()
     try:
         print_rankings_variance(session, season, position, min_sources)
+        if plot:
+            from fantasy_data.viz.rankings_variance import plot_rankings_variance
+            results = get_rankings_variance(session, season, position, min_sources)
+            pos_label = (position or "all").lower()
+            fig = plot_rankings_variance(results, season)
+            out_path = f"{output_dir}/rankings_variance_{season}_{pos_label}.html"
+            fig.write_html(out_path)
+            click.echo(f"Chart saved to {out_path}")
     finally:
         session.close()
 
@@ -244,13 +280,22 @@ def cmd_report_player(player_id, season):
 @report_group.command("trust-flags")
 @click.option("--season", required=True, type=int)
 @click.option("--position", default=None, help="Filter by position.")
-def cmd_report_trust(season, position):
+@click.option("--plot", is_flag=True, default=False, help="Save trust weight chart as PNG.")
+@click.option("--output-dir", default=".", show_default=True)
+def cmd_report_trust(season, position, plot, output_dir):
     """Show players with uncertain projections."""
-    from fantasy_data.reports.trust_flags import print_trust_flags
+    from fantasy_data.reports.trust_flags import get_trust_flags, print_trust_flags
 
     session = get_session()
     try:
         print_trust_flags(session, season, position)
+        if plot:
+            from fantasy_data.viz.trust_overview import plot_trust_weights
+            results = get_trust_flags(session, season, position)
+            fig = plot_trust_weights(results, season)
+            out_path = f"{output_dir}/trust_flags_{season}.png"
+            fig.savefig(out_path, bbox_inches="tight")
+            click.echo(f"Chart saved to {out_path}")
     finally:
         session.close()
 

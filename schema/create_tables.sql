@@ -10,7 +10,8 @@ PRAGMA foreign_keys=ON;
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS players (
-    player_id   TEXT PRIMARY KEY,       -- PFF player ID (canonical)
+    player_id   TEXT PRIMARY KEY,       -- Pipeline PLAYER ID (e.g., McCaCh01)
+    pff_id      TEXT,                   -- PFF player ID (secondary, for grade joins)
     gsis_id     TEXT,
     sleeper_id  TEXT,
     full_name   TEXT NOT NULL,
@@ -264,28 +265,3 @@ CREATE INDEX IF NOT EXISTS ix_signal_team_season ON qualitative_signals(team, se
 CREATE INDEX IF NOT EXISTS ix_signal_type ON qualitative_signals(signal_type);
 
 
--- ---------------------------------------------------------------------------
--- Pipeline Integration
--- ---------------------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS pipeline_id_map (
-    pipeline_player_id TEXT PRIMARY KEY,
-    player_id   TEXT REFERENCES players(player_id),
-    match_method TEXT,
-    match_confidence REAL,
-    created_at  TEXT
-);
-
-CREATE INDEX IF NOT EXISTS ix_pipeline_map_player ON pipeline_id_map(player_id);
-
-
-CREATE TABLE IF NOT EXISTS unmatched_players (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    pipeline_player_id TEXT NOT NULL,
-    player_name TEXT NOT NULL,
-    position    TEXT,
-    team        TEXT,
-    source      TEXT,
-    resolved_flag INTEGER DEFAULT 0,
-    created_at  TEXT
-);

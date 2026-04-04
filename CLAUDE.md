@@ -46,13 +46,13 @@ fantasy-data report --help
 src/fantasy_data/
 ├── __init__.py
 ├── db.py                          # Engine, session factory, init_db()
-├── models.py                      # 8 SQLAlchemy ORM models (all tables)
+├── models.py                      # 6 SQLAlchemy ORM models (all tables)
+├── standardize.py                 # Team, player name, coach name normalization
 ├── cli.py                         # Click CLI entry point
 ├── ingest/
-│   ├── ingest_rankings.py         # RankingsProcessor wrapper + sharp consensus
-│   ├── ingest_pff.py              # PFF CSV → players + baseline grades
-│   ├── ingest_ngs.py              # NGS CSV → baseline opportunity quality (stub)
-│   └── pipeline_id_map.py         # Pipeline PLAYER ID ↔ PFF player_id bridge
+│   ├── ingest_rankings.py         # RankingsProcessor wrapper + sharp consensus + player creation
+│   ├── ingest_pff.py              # PFF CSV → enriches existing players with grades
+│   └── ingest_ngs.py              # NGS CSV → baseline opportunity quality (stub)
 ├── compute/
 │   ├── compute_trust_weights.py   # data_trust_weight from coaching continuity
 │   ├── compute_baselines.py       # Multi-season trust-weighted averaging
@@ -69,7 +69,7 @@ src/fantasy_data/
 
 | Table | Purpose |
 |-------|---------|
-| `players` | Master identity — PFF player ID is canonical PK |
+| `players` | Master identity — pipeline PLAYER ID is canonical PK (e.g., McCaCh01) |
 | `coaching_staff` | HC/OC continuity by team+season — drives trust decay |
 | `player_season_baseline` | Core table — 60+ fields: role signals, PFF grades, rankings, ADP, fantasy output |
 | `target_competition` | Intra-team route tree competition (Phase 2) |
@@ -80,10 +80,10 @@ src/fantasy_data/
 
 ### Key Design Decisions
 
-- **PFF player ID is canonical**: All tables FK to `players.player_id` (PFF ID). The rankings pipeline uses its own IDs (`MahomPa01`-style) — `pipeline_id_map` bridges them.
+- **Pipeline PLAYER ID is canonical**: All tables FK to `players.player_id` which uses the pipeline's `player_key_dict.json` format (e.g., `McCaCh01`). PFF IDs are stored as a secondary field (`Player.pff_id`) for grade joins.
 - **Sharp consensus ≠ average rank**: `sharp_consensus_rank` = mean of 4 sharp sources (fpts, jj, hw, pff). `rankings_avg_positional` = mean of ALL sources including non-sharp (ds). These are distinct fields.
 - **Trust weight formula** (Section 6.3 of PRD): Multiplicative decay — OC change ×0.40, HC change ×0.65, team change ×0.20, injury ×0.55, rookie cap 0.50, floor 0.05.
-- **PFF ingest must run before rankings ingest**: Rankings ingest resolves pipeline PLAYER IDs to PFF IDs via name matching against the `players` table.
+- **Rankings ingest seeds the players table**: Rankings ingest creates Player records directly using the pipeline's PLAYER ID. PFF ingest is supplemental — it enriches existing players with grades by name matching.
 - **`return_dataframe=True`**: Rankings ingest calls `RankingsProcessor.process_rankings(return_dataframe=True)` to get a DataFrame directly, avoiding CSV round-trip.
 
 ### Data Ingest Order
@@ -91,8 +91,8 @@ src/fantasy_data/
 ```
 1. fantasy-data init-db
 2. fantasy-data seed-coaching --file data/coaching_staff_2024.json
-3. fantasy-data ingest pff --file <csv> --season <year>      # seeds players table
-4. fantasy-data ingest rankings --season <year>               # needs players for ID matching
+3. fantasy-data ingest rankings --season <year>               # seeds players table
+4. fantasy-data ingest pff --file <csv> --season <year>       # enriches existing players (optional)
 5. fantasy-data compute trust-weights --season <year>
 6. fantasy-data compute baselines --season <year>
 7. fantasy-data report adp-divergence --season <year>
@@ -123,13 +123,15 @@ Pipeline output → baseline field (see `ingest_rankings.py:COLUMN_MAP`):
 
 ## Testing
 
-54 tests across 5 files, all using in-memory SQLite:
+82 tests across 7 files, all using in-memory SQLite:
 
-- `test_models.py` — ORM models, FK constraints, unique constraints
-- `test_ingest_rankings.py` — Name normalization, sharp consensus computation, divergence flags, column mapping
-- `test_ingest_pff.py` — Player creation, grade ingestion, position groups
+- `test_models.py` — ORM models, FK constraints, unique constraints, pff_id field
+- `test_ingest_rankings.py` — Direct player creation, sharp consensus, divergence flags, team standardization
+- `test_ingest_pff.py` — Name-match enrichment of existing players, grade population
 - `test_compute.py` — Trust weight formula (8 cases), weighted baselines, route overlap
 - `test_reports.py` — ADP divergence filtering, rankings breakdown, variance sorting, trust flags
+- `test_standardize.py` — Team abbreviation variants (32 canonical + variants), player name normalization, coach names
+- `test_viz.py` — Theme application, chart return types for all 7 plot functions
 
 ## Integration with quant-edge
 
@@ -142,6 +144,7 @@ This repo is part of the quant-edge platform. See `/Users/henrymarsh/Documents/q
 ## Common Gotchas
 
 - **Package name mismatch**: The dependency is `fantasy-pipeline` (PyPI name) but imports as `fantasy_pipeline` (Python). The `uv.lock` resolves it from the local path `../fantasy_data_pipeline`.
-- **Empty database**: Running `ingest rankings` on an empty `players` table will log everything as unmatched. Always run `ingest pff` first.
+- **Rankings ingest is step 1**: Rankings ingest creates Player records directly. PFF ingest is optional supplemental enrichment — it matches by name against existing players.
+- **Team standardization**: All team abbreviations are normalized via `standardize.py`. Common variants like `JAC→JAX`, `LA→LAR`, `OAK→LV` are handled automatically.
 - **Coaching staff seed data**: `data/coaching_staff_2024.json` contains all 32 teams. System tags (SHANAHAN_ZONE, REID_WEST_COAST, etc.) are manually assigned.
 - **DB location**: Defaults to `fantasy_data.db` in the repo root. Override with `FANTASY_DATA_DB` env var.

@@ -10,7 +10,7 @@ from fantasy_data.reports.trust_flags import get_trust_flags
 class TestAdpDivergence:
     def test_returns_flagged_players(self, session, seed_players, seed_baselines):
         # Set up a divergence
-        b = session.get(PlayerSeasonBaseline, "PFF002_2024")
+        b = session.get(PlayerSeasonBaseline, "HillTy01_2024")
         b.sharp_consensus_rank = 3.0
         b.adp_positional_rank = 18
         b.adp_divergence_rank = 15
@@ -23,7 +23,7 @@ class TestAdpDivergence:
         assert results[0]["direction"] == "UNDER"
 
     def test_filters_by_position(self, session, seed_players, seed_baselines):
-        b = session.get(PlayerSeasonBaseline, "PFF002_2024")
+        b = session.get(PlayerSeasonBaseline, "HillTy01_2024")
         b.adp_divergence_rank = 15
         b.adp_divergence_flag = 1
         b.sharp_consensus_rank = 3.0
@@ -42,7 +42,7 @@ class TestAdpDivergence:
 
 class TestPlayerRankings:
     def test_returns_source_breakdown(self, session, seed_players, seed_baselines):
-        data = get_player_rankings(session, "PFF001", 2024)
+        data = get_player_rankings(session, "MahomPa01", 2024)
         assert data is not None
         assert data["player"] == "Patrick Mahomes"
         assert data["sources"]["FantasyPoints (fpts)"] == 1

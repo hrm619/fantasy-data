@@ -83,17 +83,17 @@ class TestComputeAllTrustWeights:
         assert stats["updated"] == 5
 
         # KC: HC continuity=1, OC continuity=0 → weight = 0.40
-        b_mahomes = session.get(PlayerSeasonBaseline, "PFF001_2024")
+        b_mahomes = session.get(PlayerSeasonBaseline, "MahomPa01_2024")
         assert b_mahomes.data_trust_weight == pytest.approx(0.40, abs=0.01)
         assert b_mahomes.oc_continuity == 0
 
         # MIA: full continuity → weight = 1.0
-        b_hill = session.get(PlayerSeasonBaseline, "PFF002_2024")
+        b_hill = session.get(PlayerSeasonBaseline, "HillTy01_2024")
         assert b_hill.data_trust_weight == 1.0
 
         # CHI: HC=0, OC=0, rookie=1, team_change=1 (no injury)
         # 1.0 * 0.40 * 0.65 * 0.20 = 0.052, min(0.052, 0.50) = 0.052
-        b_caleb = session.get(PlayerSeasonBaseline, "PFF005_2024")
+        b_caleb = session.get(PlayerSeasonBaseline, "WillCa01_2024")
         assert b_caleb.data_trust_weight == pytest.approx(0.052, abs=0.001)
         assert b_caleb.projection_uncertain_flag == 1
 
@@ -101,16 +101,16 @@ class TestComputeAllTrustWeights:
 class TestComputeWeightedBaseline:
     def test_single_season(self, session, seed_players, seed_baselines):
         # Set trust weight so weighted average works
-        b = session.get(PlayerSeasonBaseline, "PFF002_2024")
+        b = session.get(PlayerSeasonBaseline, "HillTy01_2024")
         b.data_trust_weight = 1.0
         session.commit()
 
-        result = compute_weighted_baseline(session, "PFF002", 2025)
+        result = compute_weighted_baseline(session, "HillTy01", 2025)
         assert result["target_share"] == pytest.approx(0.28)
         assert result["fpts_per_game_ppr"] == pytest.approx(17.5)
 
     def test_no_history(self, session, seed_players):
-        result = compute_weighted_baseline(session, "PFF001", 2025)
+        result = compute_weighted_baseline(session, "MahomPa01", 2025)
         assert result == {}
 
 

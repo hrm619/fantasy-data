@@ -4,27 +4,33 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from fantasy_data.models import (
-    Player, CoachingStaff, PlayerSeasonBaseline, TargetCompetition,
-    PlayerWeek, QualitativeSignal, PipelineIdMap, UnmatchedPlayer,
+    Player, CoachingStaff, PlayerSeasonBaseline,
 )
 
 
 class TestPlayerModel:
     def test_create_player(self, session):
-        p = Player(player_id="PFF999", full_name="Test Player", position="WR", team="DAL")
+        p = Player(player_id="TestPl01", full_name="Test Player", position="WR", team="DAL")
         session.add(p)
         session.commit()
-        assert session.get(Player, "PFF999").full_name == "Test Player"
+        assert session.get(Player, "TestPl01").full_name == "Test Player"
+
+    def test_player_has_pff_id_field(self, session):
+        p = Player(player_id="TestPl02", full_name="Test", position="QB",
+                    pff_id="PFF_EXT_999")
+        session.add(p)
+        session.commit()
+        assert session.get(Player, "TestPl02").pff_id == "PFF_EXT_999"
 
     def test_player_requires_name(self, session):
-        p = Player(player_id="PFF998", full_name=None, position="QB")
+        p = Player(player_id="TestPl03", full_name=None, position="QB")
         session.add(p)
         with pytest.raises(IntegrityError):
             session.commit()
 
     def test_player_requires_position(self, session):
         session.rollback()
-        p = Player(player_id="PFF997", full_name="Test", position=None)
+        p = Player(player_id="TestPl04", full_name="Test", position=None)
         session.add(p)
         with pytest.raises(IntegrityError):
             session.commit()
@@ -53,12 +59,12 @@ class TestCoachingStaff:
 class TestPlayerSeasonBaseline:
     def test_create_baseline(self, session, seed_players):
         b = PlayerSeasonBaseline(
-            baseline_id="PFF001_2025", player_id="PFF001",
+            baseline_id="MahomPa01_2025", player_id="MahomPa01",
             season=2025, team="KC",
         )
         session.add(b)
         session.commit()
-        assert session.get(PlayerSeasonBaseline, "PFF001_2025").season == 2025
+        assert session.get(PlayerSeasonBaseline, "MahomPa01_2025").season == 2025
 
     def test_fk_constraint(self, session):
         b = PlayerSeasonBaseline(
@@ -71,27 +77,16 @@ class TestPlayerSeasonBaseline:
 
     def test_baseline_relationship(self, session, seed_players):
         b = PlayerSeasonBaseline(
-            baseline_id="PFF001_2025", player_id="PFF001",
+            baseline_id="MahomPa01_2025", player_id="MahomPa01",
             season=2025, team="KC",
         )
         session.add(b)
         session.commit()
-        player = session.get(Player, "PFF001")
+        player = session.get(Player, "MahomPa01")
         assert len(player.baselines) == 1
-
-
-class TestPipelineIdMap:
-    def test_create_mapping(self, session, seed_players):
-        m = PipelineIdMap(
-            pipeline_player_id="MahomPa01", player_id="PFF001",
-            match_method="exact", match_confidence=1.0,
-        )
-        session.add(m)
-        session.commit()
-        assert session.get(PipelineIdMap, "MahomPa01").player_id == "PFF001"
 
 
 class TestAllTablesCreated:
     def test_table_count(self, engine):
         from fantasy_data.models import Base
-        assert len(Base.metadata.tables) == 8
+        assert len(Base.metadata.tables) == 6

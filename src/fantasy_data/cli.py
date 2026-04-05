@@ -101,6 +101,73 @@ def cmd_ingest_pff(file_path, season):
         session.close()
 
 
+@ingest_group.command("historical")
+@click.option("--file", "file_path", default=None,
+              help="Path to combined_data.csv (defaults to pipeline's data dir).")
+@click.option("--start-season", default=2014, type=int)
+@click.option("--end-season", default=2024, type=int)
+def cmd_ingest_historical(file_path, start_season, end_season):
+    """Ingest historical box score stats from fantasy_data_pipeline combined_data.csv."""
+    from fantasy_data.ingest.ingest_historical import run_historical_ingest
+
+    seasons = list(range(start_season, end_season + 1))
+    session = get_session()
+    try:
+        stats = run_historical_ingest(session, file_path, seasons=seasons)
+        click.echo(f"Done: {stats}")
+    finally:
+        session.close()
+
+
+@ingest_group.command("pff-bulk")
+@click.option("--dir", "data_dir", required=True, help="Directory with PFF CSV files.")
+@click.option("--start-season", default=2014, type=int)
+@click.option("--end-season", default=2025, type=int)
+def cmd_ingest_pff_bulk(data_dir, start_season, end_season):
+    """Bulk ingest PFF grades/stats from per-season CSVs (2014-2025)."""
+    from fantasy_data.ingest.ingest_pff_bulk import ingest_pff_bulk
+
+    session = get_session()
+    try:
+        stats = ingest_pff_bulk(session, data_dir, start_season, end_season)
+        click.echo(f"Done: {stats}")
+    finally:
+        session.close()
+
+
+@ingest_group.command("nflverse")
+@click.option("--start-season", default=2014, type=int)
+@click.option("--end-season", default=2024, type=int)
+@click.option("--skip-pbp", is_flag=True, default=False,
+              help="Skip play-by-play aggregation (faster, fewer fields).")
+def cmd_ingest_nflverse(start_season, end_season, skip_pbp):
+    """Ingest advanced metrics from nflverse (target share, snaps, RZ splits, etc.)."""
+    from fantasy_data.ingest.ingest_nflverse import ingest_nflverse
+
+    seasons = list(range(start_season, end_season + 1))
+    session = get_session()
+    try:
+        stats = ingest_nflverse(session, seasons, skip_pbp=skip_pbp)
+        click.echo(f"Done: {stats}")
+    finally:
+        session.close()
+
+
+@ingest_group.command("rp")
+@click.option("--dir", "data_dir", required=True,
+              help="Directory with Reception Perception CSV files.")
+def cmd_ingest_rp(data_dir):
+    """Ingest Reception Perception WR film-graded metrics."""
+    from fantasy_data.ingest.ingest_reception_perception import ingest_reception_perception
+
+    session = get_session()
+    try:
+        stats = ingest_reception_perception(session, data_dir)
+        click.echo(f"Done: {stats}")
+    finally:
+        session.close()
+
+
 @ingest_group.command("ngs")
 @click.option("--file", "file_path", required=True, help="Path to NGS CSV export.")
 @click.option("--season", required=True, type=int, help="NFL season year.")
@@ -346,5 +413,47 @@ def cmd_rankings_status(season):
         if low_source:
             click.echo(f"Players with < 3 sources: {low_source} (low confidence)")
 
+    finally:
+        session.close()
+
+
+# ---------------------------------------------------------------------------
+# Build History (full orchestration)
+# ---------------------------------------------------------------------------
+
+
+@cli.command("build-history")
+@click.option("--start-season", default=2014, type=int)
+@click.option("--end-season", default=2024, type=int)
+@click.option("--target-season", default=2025, type=int)
+@click.option("--skip-pbp", is_flag=True, default=False,
+              help="Skip play-by-play aggregation (faster).")
+@click.option("--lookback", default=3, type=int)
+def cmd_build_history(start_season, end_season, target_season, skip_pbp, lookback):
+    """Run full historical build: ingest historical + nflverse, compute trust weights + baselines."""
+    from fantasy_data.ingest.ingest_historical import run_historical_ingest
+    from fantasy_data.ingest.ingest_nflverse import ingest_nflverse
+    from fantasy_data.compute.compute_trust_weights import compute_all_trust_weights
+    from fantasy_data.compute.compute_baselines import compute_all_baselines
+
+    seasons = list(range(start_season, end_season + 1))
+    session = get_session()
+    try:
+        click.echo("=== Phase 1: Historical box score ingest ===")
+        run_historical_ingest(session, seasons=seasons)
+
+        click.echo("\n=== Phase 2: nflverse advanced metrics ===")
+        ingest_nflverse(session, seasons, skip_pbp=skip_pbp)
+
+        click.echo("\n=== Phase 3: Trust weights ===")
+        lookback_start = max(start_season, target_season - lookback)
+        for s in range(lookback_start, target_season):
+            click.echo(f"  Computing trust weights for {s}...")
+            compute_all_trust_weights(session, s, verbose=False)
+
+        click.echo(f"\n=== Phase 4: Baselines for {target_season} ===")
+        compute_all_baselines(session, target_season, lookback)
+
+        click.echo("\nBuild complete.")
     finally:
         session.close()

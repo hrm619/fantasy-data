@@ -22,59 +22,115 @@ class TestComputeTrustWeight:
     def test_full_continuity(self):
         w = compute_trust_weight(
             team_change_flag=0, hc_continuity=1, oc_continuity=1,
-            injury_concern_flag=0, rookie_flag=0,
+            qb_continuity=1, injury_concern_flag=0, rookie_flag=0,
         )
         assert w == 1.0
 
     def test_oc_change(self):
         w = compute_trust_weight(
             team_change_flag=0, hc_continuity=1, oc_continuity=0,
-            injury_concern_flag=0, rookie_flag=0,
+            qb_continuity=1, injury_concern_flag=0, rookie_flag=0,
         )
         assert w == 0.40
 
     def test_hc_change(self):
         w = compute_trust_weight(
             team_change_flag=0, hc_continuity=0, oc_continuity=1,
-            injury_concern_flag=0, rookie_flag=0,
+            qb_continuity=1, injury_concern_flag=0, rookie_flag=0,
         )
         assert w == 0.65
 
     def test_team_change(self):
         w = compute_trust_weight(
             team_change_flag=1, hc_continuity=1, oc_continuity=1,
-            injury_concern_flag=0, rookie_flag=0,
+            qb_continuity=1, injury_concern_flag=0, rookie_flag=0,
         )
         assert w == 0.20
 
     def test_rookie(self):
         w = compute_trust_weight(
             team_change_flag=0, hc_continuity=1, oc_continuity=1,
-            injury_concern_flag=0, rookie_flag=1,
+            qb_continuity=1, injury_concern_flag=0, rookie_flag=1,
         )
         assert w == 0.50
 
     def test_all_flags(self):
-        """Team change + HC + OC + injury + rookie = floor at 0.05."""
+        """Team change + HC + OC + QB + injury + rookie = floor at 0.05."""
         w = compute_trust_weight(
             team_change_flag=1, hc_continuity=0, oc_continuity=0,
-            injury_concern_flag=1, rookie_flag=1,
+            qb_continuity=0, injury_concern_flag=1, rookie_flag=1,
         )
         assert w == 0.05
 
     def test_injury_flag(self):
         w = compute_trust_weight(
             team_change_flag=0, hc_continuity=1, oc_continuity=1,
-            injury_concern_flag=1, rookie_flag=0,
+            qb_continuity=1, injury_concern_flag=1, rookie_flag=0,
         )
         assert w == 0.55
 
     def test_oc_and_hc_change(self):
         w = compute_trust_weight(
             team_change_flag=0, hc_continuity=0, oc_continuity=0,
-            injury_concern_flag=0, rookie_flag=0,
+            qb_continuity=1, injury_concern_flag=0, rookie_flag=0,
         )
         assert w == pytest.approx(0.26, abs=0.01)
+
+    # --- QB continuity tests ---
+
+    def test_qb_change_wr(self):
+        """WR with QB change gets full ×0.50 penalty."""
+        w = compute_trust_weight(
+            team_change_flag=0, hc_continuity=1, oc_continuity=1,
+            qb_continuity=0, injury_concern_flag=0, rookie_flag=0,
+            position="WR",
+        )
+        assert w == 0.50
+
+    def test_qb_change_te(self):
+        """TE gets same full ×0.50 penalty as WR."""
+        w = compute_trust_weight(
+            team_change_flag=0, hc_continuity=1, oc_continuity=1,
+            qb_continuity=0, injury_concern_flag=0, rookie_flag=0,
+            position="TE",
+        )
+        assert w == 0.50
+
+    def test_qb_change_rb(self):
+        """RB gets reduced ×0.75 penalty."""
+        w = compute_trust_weight(
+            team_change_flag=0, hc_continuity=1, oc_continuity=1,
+            qb_continuity=0, injury_concern_flag=0, rookie_flag=0,
+            position="RB",
+        )
+        assert w == 0.75
+
+    def test_qb_change_qb_unaffected(self):
+        """QB position is not penalized by their own change."""
+        w = compute_trust_weight(
+            team_change_flag=0, hc_continuity=1, oc_continuity=1,
+            qb_continuity=0, injury_concern_flag=0, rookie_flag=0,
+            position="QB",
+        )
+        assert w == 1.0
+
+    def test_qb_and_oc_change_wr(self):
+        """OC + QB changes stack multiplicatively for WR."""
+        w = compute_trust_weight(
+            team_change_flag=0, hc_continuity=1, oc_continuity=0,
+            qb_continuity=0, injury_concern_flag=0, rookie_flag=0,
+            position="WR",
+        )
+        assert w == pytest.approx(0.40 * 0.50, abs=0.01)
+
+    def test_qb_and_oc_change_rb(self):
+        """OC + QB changes for RB: ×0.40 × ×0.75 = 0.30."""
+        w = compute_trust_weight(
+            team_change_flag=0, hc_continuity=1, oc_continuity=0,
+            qb_continuity=0, injury_concern_flag=0, rookie_flag=0,
+            position="RB",
+        )
+        assert w == pytest.approx(0.40 * 0.75, abs=0.01)
 
 
 class TestComputeAllTrustWeights:

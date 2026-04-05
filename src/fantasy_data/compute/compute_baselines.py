@@ -11,20 +11,50 @@ from fantasy_data.models import PlayerSeasonBaseline
 
 # Fields that should be trust-weighted across seasons
 AGGREGABLE_FIELDS = [
+    # Opportunity volume
     "snap_share",
+    "route_participation_rate",
     "target_share",
     "air_yards_share",
     "rz_target_share",
+    "ez_target_share",
     "carries_per_game",
+    "rz_carry_share",
     "total_touches_per_game",
+    # Efficiency
+    "avg_depth_of_target",
     "yards_per_route_run",
     "catch_rate",
     "catch_rate_over_expected",
     "yards_after_catch_per_rec",
+    "racr",
+    "drop_rate",
+    "broken_tackle_rate",
     "yards_per_carry",
+    # NGS tracking
+    "avg_cushion",
+    "avg_separation",
+    "expected_yards_per_carry",
+    "rush_yards_over_expected",
+    # Down splits
+    "early_down_share",
+    "third_down_carry_share",
+    "third_down_target_share",
+    "goal_line_carry_share",
+    # FTN scheme context
+    "play_action_target_pct",
+    "screen_target_pct",
+    "contested_ball_pct",
+    "catchable_ball_pct",
+    "created_reception_pct",
+    "true_drop_rate",
+    # Scoring & consistency
     "td_rate",
     "fpts_per_game_ppr",
     "fpts_per_game_std",
+    "boom_rate",
+    "bust_rate",
+    "consistency_score",
 ]
 
 
@@ -128,11 +158,16 @@ def compute_all_baselines(
             if val is not None and getattr(baseline, field, None) is None:
                 setattr(baseline, field, val)
 
-        # Compute WOPR if we have the inputs
+        # Compute composites if we have the inputs
         ts = baseline.target_share
         ays = baseline.air_yards_share
+        rz_ts = baseline.rz_target_share
+
         if ts is not None and ays is not None:
-            baseline.wopr = (1.5 * ts) + (0.7 * ays)
+            if baseline.wopr is None:
+                baseline.wopr = (1.5 * ts) + (0.7 * ays)
+            if rz_ts is not None and baseline.market_share_score is None:
+                baseline.market_share_score = ts * 0.5 + ays * 0.3 + rz_ts * 0.2
 
         stats["computed"] += 1
 

@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS coaching_staff (
     oc_year_with_team INTEGER,
     hc_continuity_flag INTEGER DEFAULT 0,
     oc_continuity_flag INTEGER DEFAULT 0,
+    starting_qb TEXT,
+    qb_continuity_flag INTEGER DEFAULT 1,
     system_tag  TEXT,
     pass_rate_tendency REAL,
     te_usage_tendency REAL,

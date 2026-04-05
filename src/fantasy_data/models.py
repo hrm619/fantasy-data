@@ -94,6 +94,8 @@ class CoachingStaff(Base):
     oc_year_with_team = Column(Integer)
     hc_continuity_flag = Column(Integer, default=0)
     oc_continuity_flag = Column(Integer, default=0)
+    starting_qb = Column(String)  # Starting QB name (for audit/display)
+    qb_continuity_flag = Column(Integer, default=1)  # 0 = new starter vs prior season
     system_tag = Column(String)  # MCVAY_TREE, SHANAHAN_ZONE, REID_WEST_COAST, etc.
     pass_rate_tendency = Column(Float)
     te_usage_tendency = Column(Float)
@@ -158,8 +160,11 @@ class PlayerSeasonBaseline(Base):
     yards_after_catch_per_rec = Column(Float)
     broken_tackle_rate = Column(Float)
     drop_rate = Column(Float)
+    pff_offense_grade = Column(Float)
     pff_receiving_grade = Column(Float)
+    pff_pass_block_grade = Column(Float)
     pff_run_blocking_grade = Column(Float)
+    pff_passing_grade = Column(Float)  # QB only
 
     # --- Composite Demand ---
     wopr = Column(Float)  # (1.5 * target_share) + (0.7 * air_yards_share)
@@ -204,6 +209,14 @@ class PlayerSeasonBaseline(Base):
     ecr_adp_delta = Column(Float)
     ecr_avg_rank_delta = Column(Float)
     rankings_last_updated = Column(String)
+
+    # --- FTN Scheme Context (charting data, 2022+) ---
+    play_action_target_pct = Column(Float)  # % of targets on play-action
+    screen_target_pct = Column(Float)  # % of targets on screen passes
+    contested_ball_pct = Column(Float)  # % of targets that were contested (FTN)
+    catchable_ball_pct = Column(Float)  # % of targets that were catchable
+    created_reception_pct = Column(Float)  # % of catches WR-created (not schemed)
+    true_drop_rate = Column(Float)  # drops / catchable balls (FTN-charted)
 
     # --- Scoring & Fantasy Output ---
     fantasy_pts_ppr = Column(Float)
@@ -250,6 +263,85 @@ class TargetCompetition(Base):
     __table_args__ = (
         Index("ix_competition_player", "player_id"),
         Index("ix_competition_team_season", "team", "season"),
+    )
+
+
+class WrReceptionPerception(Base):
+    """Reception Perception film-graded WR metrics (Matt Harmon).
+
+    Charted from 8-game film samples per season. Covers route win rates,
+    coverage-type splits, alignment, contested catch, and YAC profile.
+    WR-only table — joins to players via player_id + season.
+    """
+
+    __tablename__ = "wr_reception_perception"
+
+    rp_id = Column(String, primary_key=True)  # player_id + season
+    player_id = Column(String, ForeignKey("players.player_id"), nullable=False)
+    season = Column(Integer, nullable=False)
+    is_prospect = Column(Integer, default=0)  # 1 = draft prospect (college stats)
+
+    # Coverage success rates (0-100 scale)
+    routes_charted = Column(Integer)
+    success_rate_man = Column(Float)
+    success_rate_zone = Column(Float)
+    success_rate_press = Column(Float)
+    success_rate_double = Column(Float)
+    pct_man = Column(Float)
+    pct_zone = Column(Float)
+    pct_press = Column(Float)
+    pct_doubled = Column(Float)
+
+    # Route tree distribution (% of routes, 0-100)
+    pct_screen = Column(Float)
+    pct_slant = Column(Float)
+    pct_curl = Column(Float)
+    pct_dig = Column(Float)
+    pct_post = Column(Float)
+    pct_nine = Column(Float)
+    pct_corner = Column(Float)
+    pct_out = Column(Float)
+    pct_comeback = Column(Float)
+    pct_flat = Column(Float)
+
+    # Alignment (% of snaps, 0-100)
+    pct_outside = Column(Float)
+    pct_slot = Column(Float)
+    pct_inline = Column(Float)
+    pct_backfield = Column(Float)
+
+    # Target efficiency
+    route_target_rate = Column(Float)
+    route_catch_rate = Column(Float)
+    catch_rate_rp = Column(Float)
+    drop_rate_rp = Column(Float)
+
+    # Contested catch
+    contested_target_rate_rp = Column(Float)
+    contested_catch_rate_rp = Column(Float)
+
+    # Tackle breaking / YAC
+    tackle_break_opportunities = Column(Integer)
+    first_contact_drop_pct = Column(Float)
+    one_broken_tackle_pct = Column(Float)
+    two_plus_broken_tackle_pct = Column(Float)
+
+    # Route-level success rates (best routes)
+    success_rate_slant = Column(Float)
+    success_rate_curl = Column(Float)
+    success_rate_dig = Column(Float)
+    success_rate_post = Column(Float)
+    success_rate_nine = Column(Float)
+    success_rate_corner = Column(Float)
+    success_rate_out = Column(Float)
+    success_rate_screen = Column(Float)
+
+    created_at = Column(String, default=_now_iso)
+
+    __table_args__ = (
+        Index("ix_rp_player", "player_id"),
+        Index("ix_rp_season", "season"),
+        UniqueConstraint("player_id", "season", name="uq_rp_player_season"),
     )
 
 

@@ -15,15 +15,23 @@ from fantasy_data.standardize import standardize_player_name, standardize_team
 
 # Mapping: PFF CSV column -> PlayerSeasonBaseline model field
 BASELINE_GRADE_MAP = {
+    # Core grades
+    "offense_grade": "pff_offense_grade",
     "receiving_grade": "pff_receiving_grade",
     "run_block_grade": "pff_run_blocking_grade",
-    "route_grade": "route_grade_pff",
+    "pass_block_grade": "pff_pass_block_grade",
     "rushing_grade": "pff_rush_grade",
-    "target_quality_rating": "target_quality_rating",
+    "passing_grade": "pff_passing_grade",
+    "route_grade": "route_grade_pff",
+    # Stats from receiving/rushing/passing endpoints
     "games": "games_played",
     "games_started": "games_started",
     "drop_rate": "drop_rate",
     "contested_catch_rate": "contested_target_rate",
+    "target_quality_rating": "target_quality_rating",
+    "yards_per_route_run": "yards_per_route_run",
+    "route_participation_rate": "route_participation_rate",
+    "avg_depth_of_target": "avg_depth_of_target",
 }
 
 # Mapping: PFF CSV column -> Player model field (biographical enrichment)
@@ -42,6 +50,7 @@ PLAYER_ENRICH_MAP = {
 POSITION_GROUP_MAP = {
     "QB": "QB",
     "RB": "BACKFIELD",
+    "HB": "BACKFIELD",
     "FB": "BACKFIELD",
     "WR": "PASS_CATCHER",
     "TE": "PASS_CATCHER",
@@ -56,9 +65,9 @@ def _match_player_by_name(session: Session, pff_name: str) -> Player | None:
     if player:
         return player
 
-    # Normalized match
+    # Normalized match (search all players, not just active)
     normalized = standardize_player_name(pff_name)
-    all_players = session.query(Player).filter(Player.is_active == 1).all()
+    all_players = session.query(Player).all()
     for p in all_players:
         if standardize_player_name(p.full_name) == normalized:
             return p

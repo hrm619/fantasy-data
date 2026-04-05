@@ -9,8 +9,8 @@
   {
     "team": "ATL", "season": 2024,
     "head_coach": "Raheem Morris", "offensive_coordinator": "Zac Robinson",
-    "hc_year_with_team": 1, "oc_year_with_team": 2,
-    "hc_continuity_flag": 0, "oc_continuity_flag": 1,
+    "hc_year_with_team": 1, "oc_year_with_team": 1,
+    "hc_continuity_flag": 0, "oc_continuity_flag": 0,
     "system_tag": "SHANAHAN_ZONE"
   },
   {
@@ -107,8 +107,8 @@
   {
     "team": "KC", "season": 2024,
     "head_coach": "Andy Reid", "offensive_coordinator": "Matt Nagy",
-    "hc_year_with_team": 12, "oc_year_with_team": 1,
-    "hc_continuity_flag": 1, "oc_continuity_flag": 0,
+    "hc_year_with_team": 12, "oc_year_with_team": 2,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
     "system_tag": "REID_WEST_COAST"
   },
   {
@@ -121,8 +121,8 @@
   {
     "team": "LAR", "season": 2024,
     "head_coach": "Sean McVay", "offensive_coordinator": "Mike LaFleur",
-    "hc_year_with_team": 8, "oc_year_with_team": 1,
-    "hc_continuity_flag": 1, "oc_continuity_flag": 0,
+    "hc_year_with_team": 8, "oc_year_with_team": 2,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
     "system_tag": "MCVAY_TREE"
   },
   {
@@ -156,8 +156,8 @@
   {
     "team": "NO", "season": 2024,
     "head_coach": "Dennis Allen", "offensive_coordinator": "Klint Kubiak",
-    "hc_year_with_team": 3, "oc_year_with_team": 2,
-    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "hc_year_with_team": 3, "oc_year_with_team": 1,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 0,
     "system_tag": "SHANAHAN_ZONE"
   },
   {
@@ -205,8 +205,8 @@
   {
     "team": "TB", "season": 2024,
     "head_coach": "Todd Bowles", "offensive_coordinator": "Liam Coen",
-    "hc_year_with_team": 3, "oc_year_with_team": 2,
-    "hc_continuity_flag": 1, "oc_continuity_flag": 1,
+    "hc_year_with_team": 3, "oc_year_with_team": 1,
+    "hc_continuity_flag": 1, "oc_continuity_flag": 0,
     "system_tag": "MCVAY_TREE"
   },
   {

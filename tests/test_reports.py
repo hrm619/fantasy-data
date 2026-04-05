@@ -9,11 +9,11 @@ from fantasy_data.reports.trust_flags import get_trust_flags
 
 class TestAdpDivergence:
     def test_returns_flagged_players(self, session, seed_players, seed_baselines):
-        # Set up a divergence
+        # Set up a divergence using positional fields
         b = session.get(PlayerSeasonBaseline, "HillTy01_2024")
-        b.sharp_consensus_rank = 3.0
+        b.sharp_pos_rank = 3.0
         b.adp_positional_rank = 18
-        b.adp_divergence_rank = 15
+        b.adp_divergence_pos = 15.0
         b.adp_divergence_flag = 1
         session.commit()
 
@@ -24,9 +24,9 @@ class TestAdpDivergence:
 
     def test_filters_by_position(self, session, seed_players, seed_baselines):
         b = session.get(PlayerSeasonBaseline, "HillTy01_2024")
-        b.adp_divergence_rank = 15
+        b.adp_divergence_pos = 15.0
         b.adp_divergence_flag = 1
-        b.sharp_consensus_rank = 3.0
+        b.sharp_pos_rank = 3.0
         session.commit()
 
         results = get_adp_divergence(session, 2024, position="QB")

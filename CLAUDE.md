@@ -57,12 +57,20 @@ src/fantasy_data/
 │   ├── compute_trust_weights.py   # data_trust_weight from coaching continuity
 │   ├── compute_baselines.py       # Multi-season trust-weighted averaging
 │   └── compute_competition.py     # Route overlap scoring (Phase 2)
-└── reports/
-    ├── adp_divergence.py          # Players where sharp ≠ ADP
-    ├── rankings.py                # Per-source breakdown for one player
-    ├── rankings_variance.py       # Cross-source disagreement (high std dev)
-    ├── player_profile.py          # Full player profile
-    └── trust_flags.py             # Projection-uncertain players
+├── reports/
+│   ├── adp_divergence.py          # Players where sharp ≠ ADP
+│   ├── rankings.py                # Per-source breakdown for one player
+│   ├── rankings_variance.py       # Cross-source disagreement (high std dev)
+│   ├── player_profile.py          # Full player profile
+│   └── trust_flags.py             # Projection-uncertain players
+└── viz/
+    ├── theme.py                   # Shared color palette and Plotly/Seaborn theming
+    ├── adp_divergence.py          # ADP divergence bar chart
+    ├── correlation_heatmap.py     # Role signal correlation matrix
+    ├── opportunity_dist.py        # Opportunity distributions + sharp vs ADP scatter
+    ├── player_profile.py          # Per-player source breakdown radar
+    ├── rankings_variance.py       # Cross-source variance plots
+    └── trust_overview.py          # Trust weight distribution
 ```
 
 ### Database Tables (models.py)
@@ -75,8 +83,6 @@ src/fantasy_data/
 | `target_competition` | Intra-team route tree competition (Phase 2) |
 | `player_week` | Weekly observation layer (Phase 2) |
 | `qualitative_signals` | Expert qualitative signals (Phase 3) |
-| `pipeline_id_map` | Bridge: fantasy_data_pipeline PLAYER ID → PFF player_id |
-| `unmatched_players` | Players that couldn't be matched for manual review |
 
 ### Key Design Decisions
 
@@ -104,14 +110,18 @@ Pipeline output → baseline field (see `ingest_rankings.py:COLUMN_MAP`):
 
 | Pipeline Column | Baseline Field |
 |----------------|----------------|
+| `avg_RK` | `rankings_avg_overall` |
 | `avg_POS RANK` | `rankings_avg_positional` |
 | `fpts_POS RANK` | `rankings_fpts_positional` |
 | `hw_POS RANK` | `rankings_hw_positional` |
 | `pff_POS RANK` | `rankings_pff_positional` |
 | `jj_POS RANK` | `rankings_jj_positional` |
 | `ds_POS RANK` | `rankings_ds_positional` |
+| `fp_POS RANK` | `fp_positional_rank` |
 | `ADP` | `adp_consensus` |
 | `POS ADP` | `adp_positional_rank` |
+| `ECR ADP Delta` | `ecr_adp_delta` |
+| `ECR Delta` | `ecr_avg_rank_delta` |
 
 ### Computed Fields
 
@@ -123,7 +133,7 @@ Pipeline output → baseline field (see `ingest_rankings.py:COLUMN_MAP`):
 
 ## Testing
 
-82 tests across 7 files, all using in-memory SQLite:
+86 tests across 7 files, all using in-memory SQLite:
 
 - `test_models.py` — ORM models, FK constraints, unique constraints, pff_id field
 - `test_ingest_rankings.py` — Direct player creation, sharp consensus, divergence flags, team standardization

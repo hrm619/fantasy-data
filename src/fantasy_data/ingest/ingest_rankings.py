@@ -1,19 +1,20 @@
 """Ingest rankings from fantasy_data_pipeline into player_season_baseline.
 
 Wraps RankingsProcessor, maps output columns to the baseline schema,
-computes sharp_consensus_rank from the 4 sharp sources, and creates
-Player records directly (pipeline PLAYER ID is the canonical ID).
+computes format-neutral sharp consensus using position-first ranking
+with ADP scarcity curve conversion, and creates Player records directly.
 """
 
 from datetime import datetime, timezone
 
+import numpy as np
 import pandas as pd
 from sqlalchemy.orm import Session
 
 from fantasy_data.models import Player, PlayerSeasonBaseline
 from fantasy_data.standardize import standardize_team
 
-# Sharp sources used for sharp_consensus_rank (equal-weighted mean)
+# Sharp sources used for sharp positional consensus (equal-weighted mean)
 SHARP_SOURCES = ["fpts", "jj", "hw", "pff"]
 
 # Column mapping: pipeline output column -> baseline field
@@ -33,30 +34,90 @@ COLUMN_MAP = {
 }
 
 # Sharp source positional rank columns in the pipeline output
-SHARP_RANK_COLUMNS = {
-    "fpts": "fpts_POS RANK",
-    "jj": "jj_POS RANK",
-    "hw": "hw_POS RANK",
-    "pff": "pff_POS RANK",
-}
+SHARP_POS_COLUMNS = [
+    "fpts_POS RANK", "jj_POS RANK", "hw_POS RANK", "pff_POS RANK",
+]
 
 DIVERGENCE_THRESHOLD = 12
 
 
-def compute_sharp_consensus(row: pd.Series) -> tuple[float | None, int]:
-    """Compute sharp consensus rank from available sharp source positional ranks.
+def _build_scarcity_curves(df: pd.DataFrame) -> dict[str, callable]:
+    """Build ADP scarcity curves — map positional rank to ADP overall.
 
-    Returns (sharp_consensus_rank, source_count).
+    For each position, creates an interpolation function that converts
+    a (possibly fractional) positional rank to the ADP overall value
+    that position typically goes at.
+
+    E.g., if ADP says WR1 goes at pick 1, WR2 at pick 5, WR3 at pick 7,
+    then the curve maps 2.5 → interpolated between 5 and 7.
     """
-    ranks = []
-    for source in SHARP_SOURCES:
-        col = SHARP_RANK_COLUMNS[source]
-        val = row.get(col)
-        if pd.notna(val):
-            ranks.append(float(val))
-    if len(ranks) == 0:
-        return None, 0
-    return sum(ranks) / len(ranks), len(ranks)
+    curves = {}
+    for pos in ["QB", "RB", "WR", "TE"]:
+        pos_df = df[df["POS"] == pos][["POS ADP", "ADP"]].dropna()
+        if len(pos_df) < 2:
+            continue
+        pos_df = pos_df.sort_values("POS ADP")
+        x = pos_df["POS ADP"].values.astype(float)
+        y = pos_df["ADP"].values.astype(float)
+
+        def make_interp(x_vals, y_vals):
+            def interp(pos_rank):
+                return float(np.interp(pos_rank, x_vals, y_vals))
+            return interp
+
+        curves[pos] = make_interp(x, y)
+    return curves
+
+
+def compute_sharp_consensus(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute format-neutral sharp consensus using position-first ranking.
+
+    Solves the 3WR format bias problem: Hayden Winks ranks in Underdog
+    best ball format (3WR), which inflates WR overall ranks by 30-50
+    positions. By anchoring on positional ranks (where format doesn't
+    matter) and converting back to overall via ADP's scarcity curve,
+    the sharp consensus is format-neutral.
+
+    Step 1: Compute sharp_pos_rank per position = mean of 4 sharp source POS RANKs.
+    Step 2: Build ADP scarcity curve per position (pos_rank → ADP overall).
+    Step 3: Map each player's sharp_pos_rank through the curve → sharp_mapped_overall.
+    Step 4: Re-rank the mapped values → sharp_consensus_rank.
+
+    Sharp sources say WHO is best at each position.
+    ADP scarcity curve says HOW positions interleave.
+    """
+    df = df.copy()
+
+    # Step 1: Sharp positional consensus
+    available_cols = [c for c in SHARP_POS_COLUMNS if c in df.columns]
+    df["sharp_pos_rank"] = df[available_cols].mean(axis=1, skipna=True)
+    df["sharp_source_count"] = df[available_cols].notna().sum(axis=1)
+
+    # Step 2: Build ADP scarcity curves
+    curves = _build_scarcity_curves(df)
+
+    # Step 3: Map through scarcity curve
+    def map_through_curve(row):
+        pos = row.get("POS", "")
+        spr = row.get("sharp_pos_rank")
+        if pos in curves and pd.notna(spr):
+            return curves[pos](spr)
+        return None
+
+    df["sharp_mapped_overall"] = df.apply(map_through_curve, axis=1)
+
+    # Step 4: Re-rank
+    df["sharp_consensus_rank"] = df["sharp_mapped_overall"].rank(method="min")
+
+    # Positional divergence (cleaner signal — fully format-neutral)
+    df["adp_divergence_pos"] = df.apply(
+        lambda r: r["POS ADP"] - r["sharp_pos_rank"]
+        if pd.notna(r.get("POS ADP")) and pd.notna(r.get("sharp_pos_rank"))
+        else None,
+        axis=1,
+    )
+
+    return df
 
 
 def ingest_rankings(
@@ -71,18 +132,14 @@ def ingest_rankings(
     Creates Player records directly from the pipeline output — the pipeline's
     PLAYER ID (e.g., McCaCh01) is the canonical player_id.
 
-    Args:
-        session: SQLAlchemy session.
-        df: DataFrame from RankingsProcessor.process_rankings(return_dataframe=True).
-        season: NFL season year.
-        league_type: Pipeline league type used.
-        verbose: Print progress info.
-
-    Returns:
-        Dict with counts: created, existing, skipped, updated.
+    Computes format-neutral sharp consensus using position-first ranking
+    with ADP scarcity curve conversion before storing.
     """
     now_iso = datetime.now(timezone.utc).isoformat()
     stats = {"created": 0, "existing": 0, "skipped": 0, "updated": 0}
+
+    # Compute sharp consensus on the full DataFrame
+    df = compute_sharp_consensus(df)
 
     for _, row in df.iterrows():
         player_id = row.get("PLAYER ID")
@@ -110,7 +167,6 @@ def ingest_rankings(
             session.add(player)
             stats["created"] += 1
         else:
-            # Update team if changed
             if team:
                 player.team = team
             player.updated_at = now_iso
@@ -134,20 +190,30 @@ def ingest_rankings(
             if pd.notna(val):
                 setattr(baseline, baseline_field, val)
 
-        # Compute sharp consensus rank
-        sharp_rank, source_count = compute_sharp_consensus(row)
-        baseline.rankings_source_count = source_count
-        baseline.sharp_consensus_rank = sharp_rank
+        # Store sharp consensus (position-first + scarcity-mapped)
+        if pd.notna(row.get("sharp_pos_rank")):
+            baseline.sharp_pos_rank = float(row["sharp_pos_rank"])
+        baseline.rankings_source_count = int(row.get("sharp_source_count", 0))
 
-        # Compute ADP divergence
-        adp_pos_rank = baseline.adp_positional_rank
-        if sharp_rank is not None and adp_pos_rank is not None:
-            divergence = int(round(adp_pos_rank - sharp_rank))
-            baseline.adp_divergence_rank = divergence
-            baseline.adp_divergence_flag = 1 if abs(divergence) >= DIVERGENCE_THRESHOLD else 0
+        if pd.notna(row.get("sharp_consensus_rank")):
+            baseline.sharp_consensus_rank = float(row["sharp_consensus_rank"])
+
+        # Positional divergence (primary — format-neutral)
+        if pd.notna(row.get("adp_divergence_pos")):
+            div_pos = float(row["adp_divergence_pos"])
+            baseline.adp_divergence_pos = div_pos
+            baseline.adp_divergence_flag = 1 if abs(div_pos) >= DIVERGENCE_THRESHOLD else 0
+        else:
+            baseline.adp_divergence_pos = None
+            baseline.adp_divergence_flag = 0
+
+        # Overall divergence (supplemental — for draft ordering)
+        adp_overall = row.get("ADP")
+        sharp_overall = row.get("sharp_consensus_rank")
+        if pd.notna(adp_overall) and pd.notna(sharp_overall):
+            baseline.adp_divergence_rank = int(round(adp_overall - sharp_overall))
         else:
             baseline.adp_divergence_rank = None
-            baseline.adp_divergence_flag = 0
 
         baseline.rankings_last_updated = now_iso
         stats["updated"] += 1
@@ -169,10 +235,7 @@ def run_rankings_pipeline(
     data_path: str | None = None,
     verbose: bool = True,
 ) -> dict[str, int]:
-    """Run the full rankings pipeline: process + ingest.
-
-    Convenience wrapper that calls RankingsProcessor and then ingest_rankings.
-    """
+    """Run the full rankings pipeline: process + ingest."""
     from fantasy_pipeline import RankingsProcessor
 
     if verbose:

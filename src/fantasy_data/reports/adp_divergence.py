@@ -22,7 +22,7 @@ def get_adp_divergence(
         .join(PlayerSeasonBaseline, Player.player_id == PlayerSeasonBaseline.player_id)
         .filter(
             PlayerSeasonBaseline.season == season,
-            PlayerSeasonBaseline.adp_divergence_rank.isnot(None),
+            PlayerSeasonBaseline.adp_divergence_pos.isnot(None),
         )
     )
 
@@ -38,14 +38,15 @@ def get_adp_divergence(
 
     results = []
     for player, baseline in rows:
-        direction = "UNDER" if baseline.adp_divergence_rank > 0 else "OVER"
+        div_pos = baseline.adp_divergence_pos
+        direction = "UNDER" if div_pos and div_pos > 0 else "OVER"
         results.append({
             "player": player.full_name,
             "pos": player.position,
             "team": player.team,
             "adp_rank": baseline.adp_positional_rank,
-            "sharp_rank": round(baseline.sharp_consensus_rank, 1) if baseline.sharp_consensus_rank else None,
-            "divergence": baseline.adp_divergence_rank,
+            "sharp_rank": round(baseline.sharp_pos_rank, 1) if baseline.sharp_pos_rank else None,
+            "divergence": round(div_pos) if div_pos else None,
             "direction": direction,
             "sources": baseline.rankings_source_count,
         })

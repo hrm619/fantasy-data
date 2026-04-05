@@ -185,9 +185,11 @@ class PlayerSeasonBaseline(Base):
     fp_projected_pts_ppr = Column(Float)
     fp_projected_pts_std = Column(Float)
     fp_positional_rank = Column(Integer)
-    sharp_consensus_rank = Column(Float)  # mean of 4 sharp sources
-    adp_divergence_rank = Column(Integer)  # sharp_consensus - adp_positional
-    adp_divergence_flag = Column(Integer, default=0)  # abs(divergence) >= 12
+    sharp_pos_rank = Column(Float)  # within-position sharp consensus (mean of 4 sharp POS RANKs)
+    sharp_consensus_rank = Column(Float)  # format-neutral overall rank (via ADP scarcity curve)
+    adp_divergence_pos = Column(Float)  # positional: adp_pos_rank - sharp_pos_rank
+    adp_divergence_rank = Column(Integer)  # overall: ADP rank - sharp_consensus_rank
+    adp_divergence_flag = Column(Integer, default=0)  # abs(adp_divergence_pos) >= 12
     projection_uncertain_flag = Column(Integer, default=0)
 
     # --- Per-Source Rankings (from rankings pipeline) ---

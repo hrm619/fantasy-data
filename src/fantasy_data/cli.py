@@ -153,6 +153,22 @@ def cmd_ingest_nflverse(start_season, end_season, skip_pbp):
         session.close()
 
 
+@ingest_group.command("historical-adp")
+@click.option("--start-season", default=2017, type=int)
+@click.option("--end-season", default=2024, type=int)
+def cmd_ingest_historical_adp(start_season, end_season):
+    """Fetch and ingest historical ADP from Fantasy Football Calculator (2017-2024)."""
+    from fantasy_data.ingest.ingest_historical_adp import ingest_historical_adp
+
+    seasons = list(range(start_season, end_season + 1))
+    session = get_session()
+    try:
+        stats = ingest_historical_adp(session, seasons)
+        click.echo(f"Done: {stats}")
+    finally:
+        session.close()
+
+
 @ingest_group.command("rp")
 @click.option("--dir", "data_dir", required=True,
               help="Directory with Reception Perception CSV files.")

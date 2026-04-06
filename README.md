@@ -4,49 +4,45 @@ Fantasy football data model, ETL, and edge identification for the [quant-edge](h
 
 ## What This Does
 
-Builds a structured database of fantasy football player valuations by combining multiple expert ranking sources with PFF grades, coaching continuity data, and trust-weighted historical baselines. The primary output is an **ADP divergence report** — players where a sharp consensus (equal-weighted mean of FantasyPoints, LateRound, Underdog, PFF positional ranks) disagrees with public consensus ADP by 12+ positions.
+Builds a structured database of fantasy football player valuations across 12 NFL seasons (2014-2025) by combining 8 data sources: expert rankings, PFF grades, nflverse play-by-play, NGS tracking, FTN charting, Reception Perception film study, historical ADP, and coaching continuity data. Trust-weighted baselines account for HC, OC, and QB changes.
 
-## Architecture
+The primary output is an **ADP divergence report** — players where sharp expert consensus disagrees with public market ADP, enriched with PFF grades, scheme context, and tracking data to explain *why* the divergence exists.
+
+## Data Model
+
+**2,248 players · 8,536 player-season baselines · 90+ fields per baseline · 12 seasons**
 
 ```
-External Sources                    fantasy_data_pipeline
-(PFF CSV, FantasyPros,             (RankingsProcessor)
- FantasyPoints, LateRound,               │
- Underdog, DraftShark)                    │ return_dataframe=True
-       │                                 ▼
-       │ manual CSV              ┌──────────────────┐
-       ▼                         │ ingest_rankings   │
-┌──────────────┐                 │ • column mapping  │
-│ ingest_pff   │                 │ • sharp consensus │
-│ • players    │                 │ • ADP divergence  │
-│ • PFF grades │                 └────────┬─────────┘
-└──────┬───────┘                          │
-       │        ┌─────────────────────────┘
-       ▼        ▼
-  ┌─────────────────────────────────┐
-  │         SQLite Database         │
-  │  players │ coaching_staff       │
-  │  player_season_baseline         │
-  │  target_competition (Phase 2)   │
-  │  player_week (Phase 2)          │
-  │  qualitative_signals (Phase 3)  │
-  └─────────────┬───────────────────┘
-                │
-       ┌────────┼────────┐
-       ▼        ▼        ▼
-   compute   compute   compute
-   trust     baselines  competition
-   weights              (Phase 2)
-       │        │
-       ▼        ▼
-    ┌─────────────────┐
-    │     Reports     │
-    │ adp-divergence  │
-    │ rankings        │
-    │ rankings-var    │
-    │ player profile  │
-    │ trust-flags     │
-    └─────────────────┘
+                    ┌──────────────────────┐
+                    │     8 Data Sources    │
+                    └──────────┬───────────┘
+                               │
+   ┌───────────────┬───────────┼───────────┬──────────────┐
+   ▼               ▼           ▼           ▼              ▼
+Rankings       nflverse      PFF API    Reception      Coaching
+Pipeline      (seasonal,    (grades,   Perception     Staff
+(6 experts)    PBP, NGS,    stats,     (film-graded   (HC, OC, QB
+               FTN, PFR,    bulk)      WR metrics)    continuity)
+               snap counts)
+   │               │           │           │              │
+   └───────────────┴─────┬─────┴───────────┘              │
+                         ▼                                │
+              ┌─────────────────────┐                     │
+              │   SQLite Database   │◄────────────────────┘
+              │                     │
+              │  players (2,248)    │
+              │  baselines (8,536)  │
+              │  coaching (384)     │
+              │  reception_perc     │
+              │    (117 WR records) │
+              └─────────┬──────────┘
+                        │
+               ┌────────┼────────┐
+               ▼        ▼        ▼
+           trust     baselines   reports
+           weights   (40+ field  + viz
+           (HC/OC/   weighted    (7 charts)
+            QB decay) averages)
 ```
 
 ## Quick Start
@@ -56,64 +52,72 @@ External Sources                    fantasy_data_pipeline
 cd fantasy-data
 uv sync
 
-# Initialize database
+# Full historical build (automated)
 fantasy-data init-db
-
-# Seed coaching staff (32 teams, 2024 season)
+fantasy-data seed-coaching --file data/coaching_staff_historical.json
 fantasy-data seed-coaching --file data/coaching_staff_2024.json
+fantasy-data seed-coaching --file data/coaching_staff_2025.json
+fantasy-data build-history --start-season 2014 --end-season 2024 --target-season 2025
 
-# Ingest rankings (seeds players table from FantasyPros + all sources)
-fantasy-data ingest rankings --league-type redraft --season 2025
-
-# Enrich players with PFF grades (optional, requires existing players)
-fantasy-data ingest pff --file <pff-export.csv> --season 2025
-
-# Compute trust weights
+# Or step by step
+fantasy-data ingest historical                                        # box scores 2014-2024
+fantasy-data ingest nflverse --start-season 2014 --end-season 2024    # advanced metrics
+fantasy-data ingest pff-bulk --dir data-dev/pff-grades                # PFF grades
+fantasy-data ingest historical-adp                                    # ADP 2017-2024
+fantasy-data ingest rp --dir "data-dev/Reception Perception WR Deep Dive"
+fantasy-data ingest rankings --season 2025                            # current season
 fantasy-data compute trust-weights --season 2025
+fantasy-data compute baselines --season 2025
 
-# Generate reports
-fantasy-data report adp-divergence --season 2025 --position WR
-fantasy-data report rankings --player-id <pff-id> --season 2025
-fantasy-data report rankings-variance --season 2025 --min-sources 3
-fantasy-data report player --player-id <pff-id> --season 2025
-fantasy-data report trust-flags --season 2025
-
-# Check data freshness
-fantasy-data rankings-status --season 2025
+# Reports
+fantasy-data report adp-divergence --season 2025 --plot
+fantasy-data report rankings --player-id ChasJa00 --season 2025 --plot
+fantasy-data report rankings-variance --season 2025 --plot
+fantasy-data report trust-flags --season 2025 --plot
+fantasy-data report player --player-id ChasJa00 --season 2025
 ```
+
+## Trust Weight System
+
+Historical baselines are discounted when a player's production context changes:
+
+| Factor | Multiplier | Rationale |
+|--------|-----------|-----------|
+| New OC | ×0.40 | Scheme change affects usage, route trees, play design |
+| New HC | ×0.65 | Culture/philosophy shift |
+| New QB (WR/TE) | ×0.50 | Target distribution, timing, volume all change |
+| New QB (RB) | ×0.75 | Less affected than pass catchers |
+| Team change | ×0.20 | Entirely new context |
+| Injury concern | ×0.55 | Missed time uncertainty |
+| Rookie | cap 0.50 | No NFL history |
+| Floor | 0.05 | Always some signal |
+
+Multipliers stack multiplicatively. QB changes are auto-detected from baseline data.
+
+## Key Concepts
+
+- **Sharp consensus**: Format-neutral ranking from 4 sharp sources (FantasyPoints, LateRound, Underdog, PFF) using position-first ranking with ADP scarcity curve conversion
+- **ADP divergence**: Where sharp consensus disagrees with market ADP by 12+ positions
+- **Canonical player ID**: Pipeline's `player_key_dict.json` format (e.g., `McCaCh01`). PFF IDs stored as secondary field. nflverse IDs resolved via pfr_id.
+- **No-overwrite ingest**: All modules only set NULL fields, so multiple sources layer safely
 
 ## Dependencies
 
-- **[fantasy-pipeline](https://github.com/hrm619/fantasy_data_pipeline)** — multi-source rankings processor (installed as editable local dependency)
+- **[fantasy-pipeline](https://github.com/hrm619/fantasy_data_pipeline)** — multi-source rankings processor
+- **nfl_data_py** — nflverse data access (seasonal, PBP, NGS, FTN, PFR, snap counts)
 - **SQLAlchemy** — ORM and database management
 - **Click** — CLI framework
 - **pandas** — data manipulation
 
-## Data Flow
-
-1. **Rankings ingest** calls `RankingsProcessor(return_dataframe=True)`, creates Player records directly using the pipeline's PLAYER ID (e.g., `McCaCh01`), maps output columns to baseline schema, computes `sharp_consensus_rank` from 4 sharp sources, and computes `adp_divergence_rank`
-2. **PFF ingest** (optional) enriches existing Player records with PFF grades and biographical data by name matching. Stores PFF ID as secondary identifier.
-3. **Trust weight computation** joins player flags with `coaching_staff` continuity data to produce `data_trust_weight` per player-season
-4. **Baseline computation** produces trust-weighted multi-season averages for role signal metrics
-5. **Reports** surface ADP divergences, cross-source disagreements, and projection-uncertain players
-
-## Key Concepts
-
-- **Sharp consensus rank**: Equal-weighted mean of 4 sharp source positional ranks (FantasyPoints, LateRound, Underdog, PFF). Distinct from `rankings_avg_positional` which includes all sources.
-- **ADP divergence**: `adp_positional_rank - sharp_consensus_rank`. Positive = market undervalues. Flagged at |12|+ positions.
-- **Trust weight**: Decays with OC change (×0.40), HC change (×0.65), team change (×0.20), injury (×0.55), rookie (cap 0.50). Floor at 0.05.
-- **Canonical player ID**: Uses `fantasy_data_pipeline`'s PLAYER ID format (e.g., `McCaCh01`) directly — no bridge table needed. PFF IDs stored as secondary field for grade joins.
-- **Team standardization**: All team abbreviations normalized to canonical 32-team set (e.g., `JAC→JAX`, `LA→LAR`, `OAK→LV`).
-
 ## Tests
 
 ```bash
-uv run pytest tests/ -v    # 82 tests
+uv run pytest tests/ -v --ignore=tests/test_viz.py    # 118 tests
 ```
 
 ## Phase Roadmap
 
-- **Phase 1 (current)**: Schema, PFF ingest, rankings ingest, trust weights, ADP divergence reports
-- **Phase 1b**: Research-assistant fantasy football domain module (non-blocking)
-- **Phase 2**: Automated source fetching, target competition, weekly in-season layer
-- **Phase 3**: Qualitative signal automation from podcast ingestion
+- **Phase 1 (complete)**: Multi-source ingest (8 sources), trust weights with QB continuity, PFF grades, NGS tracking, FTN charting, historical ADP, Reception Perception, baseline computation, ADP divergence reports
+- **Phase 2 (next)**: Weekly in-season layer (`player_week` table), target competition analysis, visualization upgrades
+- **Phase 3**: Qualitative signal automation from podcast ingestion via research-assistant
+- **Calibration**: Year-over-year correlation study to empirically validate trust weight multipliers

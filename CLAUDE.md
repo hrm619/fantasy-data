@@ -25,8 +25,11 @@ uv sync
 # Install with dev tools (pytest, ruff, mypy)
 uv sync --extra dev
 
-# Run tests (exclude viz unless plotly installed)
+# Run tests (exclude viz unless plotly/scipy installed)
 uv run pytest tests/ -v --ignore=tests/test_viz.py
+
+# Run viz tests (requires viz extra)
+uv sync --extra viz && uv run pytest tests/test_viz.py -v
 
 # Run single test
 uv run pytest tests/test_compute.py::TestComputeTrustWeight -v
@@ -70,13 +73,14 @@ src/fantasy_data/
 │   ├── player_profile.py              # Full player profile
 │   └── trust_flags.py                 # Projection-uncertain players
 └── viz/
-    ├── theme.py                       # Okabe-Ito palette, Plotly/Seaborn theming
-    ├── adp_divergence.py              # ADP divergence bar chart (Plotly)
-    ├── correlation_heatmap.py         # Role signal correlation matrix (Seaborn)
-    ├── opportunity_dist.py            # Opportunity distributions + sharp vs ADP scatter
-    ├── player_profile.py              # Per-player source breakdown (Plotly)
-    ├── rankings_variance.py           # Cross-source variance scatter (Plotly)
-    └── trust_overview.py              # Trust weight distribution (Matplotlib)
+    ├── theme.py                       # NYT-inspired theme: COLORS, FONTS, LAYOUT, apply_theme(), color_for_mode()
+    ├── fonts/Inter/                   # Bundled Inter variable font + OFL license
+    ├── adp_divergence.py              # ADP divergence bar chart (Plotly, diverging colors)
+    ├── correlation_heatmap.py         # Role signal correlation matrix (Plotly heatmap)
+    ├── opportunity_dist.py            # Opportunity KDE distributions + sharp vs ADP scatter (Plotly)
+    ├── player_profile.py              # Per-player source breakdown (Plotly, spotlight mode)
+    ├── rankings_variance.py           # Cross-source variance scatter (Plotly, categorical colors)
+    └── trust_overview.py              # Trust weight distribution (Plotly horizontal bar)
 
 scripts/
 ├── build_coaching_history.py          # Generate coaching_staff_historical.json with QBs
@@ -165,7 +169,7 @@ Or use `fantasy-data build-history` for an automated Phase 2-4 sequence.
 - `test_compute.py` — Trust weight formula (14 cases incl. QB continuity), baselines, route overlap
 - `test_reports.py` — ADP divergence filtering, rankings breakdown, variance, trust flags
 - `test_standardize.py` — Team abbreviations, player names, coach names
-- `test_viz.py` — Theme application, chart return types (requires `--extra viz`)
+- `test_viz.py` — NYT theme API (apply_theme, color_for_mode, annotate_point), all 7 chart modules return `go.Figure` (requires `--extra viz`)
 
 ## Integration with quant-edge
 

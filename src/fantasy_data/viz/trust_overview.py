@@ -1,55 +1,70 @@
-"""Trust Overview — internal QC (Seaborn)."""
+"""Trust Overview — projection uncertainty QC (Plotly)."""
 
-import seaborn as sns
-import matplotlib.pyplot as plt
+from __future__ import annotations
 
-from fantasy_data.viz.theme import apply_seaborn_theme, COLORS
+import plotly.graph_objects as go
+
+from fantasy_data.viz.theme import COLORS, apply_theme, format_axis, color_for_mode
 
 
-def plot_trust_weights(results: list[dict], season: int) -> plt.Figure:
+def plot_trust_weights(results: list[dict], season: int) -> go.Figure:
     """Plot trust weight distribution for flagged players.
 
     Args:
         results: output of reports.trust_flags.get_trust_flags()
         season: NFL season year.
     """
-    apply_seaborn_theme()
-
     if not results:
-        fig, ax = plt.subplots()
-        ax.text(0.5, 0.5, "No flagged players", ha="center", va="center",
-                transform=ax.transAxes)
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No flagged players",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=14, color=COLORS["text_tertiary"]),
+        )
+        apply_theme(fig, title=f"No Projection-Uncertain Players — {season}")
         return fig
 
     names = [r["player"] for r in results]
     weights = [r["trust_weight"] or 0 for r in results]
     reasons = [r["reasons"] for r in results]
 
+    diverging = color_for_mode("diverging")
     bar_colors = [
-        COLORS["uncertain"] if "rookie" in r
-        else COLORS["negative"] if "new OC" in r or "new HC" in r
-        else COLORS["muted"]
+        COLORS["data_default"] if "rookie" in r
+        else diverging[0] if "new OC" in r or "new HC" in r
+        else COLORS["data_default"]
         for r in reasons
     ]
 
-    fig, ax = plt.subplots(figsize=(11, max(5, len(names) * 0.35)))
-    bars = ax.barh(names, weights, color=bar_colors, alpha=0.85)
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=weights,
+        y=names,
+        orientation="h",
+        marker_color=bar_colors,
+        marker_opacity=0.85,
+        text=reasons,
+        textposition="outside",
+        textfont=dict(size=9, color=COLORS["text_tertiary"]),
+        hovertemplate="<b>%{y}</b><br>Trust Weight: %{x:.2f}<br>%{text}<extra></extra>",
+    ))
 
-    for bar, reason in zip(bars, reasons):
-        ax.text(
-            bar.get_width() + 0.01, bar.get_y() + bar.get_height() / 2,
-            reason, va="center", fontsize=9, color="#555555",
-        )
-
-    ax.axvline(x=0.7, linestyle="--", color="#AAAAAA", linewidth=1,
-               label="min reliable threshold (0.70)")
-    ax.set_xlim(0, 1.25)
-    ax.set_xlabel("Data Trust Weight")
-    ax.set_title(
-        f"Projection-Uncertain Players — {season} "
-        f"(below 0.70 threshold requires manual review)",
+    fig.add_vline(
+        x=0.7, line_dash="dash", line_color=COLORS["spine"], line_width=1,
     )
-    ax.legend(loc="lower right")
-    ax.invert_yaxis()
-    plt.tight_layout()
+
+    fig.update_layout(
+        xaxis=dict(range=[0, 1.25]),
+        yaxis=dict(autorange="reversed"),
+        height=max(350, len(names) * 22),
+    )
+
+    apply_theme(
+        fig,
+        title=f"Projection-Uncertain Players Requiring Manual Review",
+        subtitle=f"{season} — dashed line marks 0.70 reliability threshold",
+    )
+    format_axis(fig, "x", "Data Trust Weight")
+
     return fig

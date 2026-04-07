@@ -376,8 +376,8 @@ def cmd_report_trust(season, position, plot, output_dir):
             from fantasy_data.viz.trust_overview import plot_trust_weights
             results = get_trust_flags(session, season, position)
             fig = plot_trust_weights(results, season)
-            out_path = f"{output_dir}/trust_flags_{season}.png"
-            fig.savefig(out_path, bbox_inches="tight")
+            out_path = f"{output_dir}/trust_flags_{season}.html"
+            fig.write_html(out_path, include_plotlyjs="cdn")
             click.echo(f"Chart saved to {out_path}")
     finally:
         session.close()

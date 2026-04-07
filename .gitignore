@@ -12,3 +12,6 @@ build/
 *.sqlite
 .venv/
 .env
+.DS_Store
+data-dev/
+qualitative-dev/

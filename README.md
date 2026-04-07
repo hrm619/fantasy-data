@@ -118,6 +118,7 @@ uv run pytest tests/ -v --ignore=tests/test_viz.py    # 118 tests
 ## Phase Roadmap
 
 - **Phase 1 (complete)**: Multi-source ingest (8 sources), trust weights with QB continuity, PFF grades, NGS tracking, FTN charting, historical ADP, Reception Perception, baseline computation, ADP divergence reports
-- **Phase 2 (next)**: Weekly in-season layer (`player_week` table), target competition analysis, visualization upgrades
+- **Phase 2 (next)**: Weekly in-season layer (`player_week` table), target competition analysis
+- **Viz rewrite (complete)**: NYT-inspired theme (Inter font, editorial color system), all 7 charts converted to Plotly, Seaborn/Matplotlib removed
 - **Phase 3**: Qualitative signal automation from podcast ingestion via research-assistant
 - **Calibration**: Year-over-year correlation study to empirically validate trust weight multipliers

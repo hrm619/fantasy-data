@@ -247,8 +247,8 @@ def aggregate_seasonal(df: pd.DataFrame) -> pd.DataFrame:
     Output: One row per (player_id, season) with baseline-ready fields.
     """
     out = df[["player_id", "season"]].copy()
-    out["target_share"] = df.get("target_share")
-    out["air_yards_share"] = df.get("air_yards_share")
+    out["target_share"] = df.get("tgt_sh")
+    out["air_yards_share"] = df.get("ay_sh")
     out["racr"] = df.get("racr")
     out["dominator_rating"] = df.get("dom")
 

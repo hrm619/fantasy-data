@@ -23,8 +23,8 @@ def _make_seasonal_df():
     return pd.DataFrame({
         "player_id": ["00-001", "00-002", "00-003"],
         "season": [2024, 2024, 2024],
-        "target_share": [0.28, 0.15, 0.0],
-        "air_yards_share": [0.35, 0.12, 0.0],
+        "tgt_sh": [0.28, 0.15, 0.0],
+        "ay_sh": [0.35, 0.12, 0.0],
         "racr": [1.05, 0.95, None],
         "dom": [0.30, 0.15, None],
         "receptions": [100, 50, 0],

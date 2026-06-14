@@ -96,7 +96,7 @@ Multipliers stack multiplicatively. QB changes are auto-detected from baseline d
 
 ## Key Concepts
 
-- **Sharp consensus**: Format-neutral ranking from 4 sharp sources (FantasyPoints, LateRound, Underdog, PFF) using position-first ranking with ADP scarcity curve conversion
+- **Sharp consensus**: Format-neutral ranking from 5 sharp sources (FantasyPoints, LateRound, Underdog, PFF, DraftSharks) using position-first ranking with ADP scarcity curve conversion
 - **ADP divergence**: Where sharp consensus disagrees with market ADP by 12+ positions
 - **Canonical player ID**: Pipeline's `player_key_dict.json` format (e.g., `McCaCh01`). PFF IDs stored as secondary field. nflverse IDs resolved via pfr_id.
 - **No-overwrite ingest**: All modules only set NULL fields, so multiple sources layer safely

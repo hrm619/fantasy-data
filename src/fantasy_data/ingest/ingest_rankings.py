@@ -15,7 +15,7 @@ from fantasy_data.models import Player, PlayerSeasonBaseline
 from fantasy_data.standardize import standardize_team
 
 # Sharp sources used for sharp positional consensus (equal-weighted mean)
-SHARP_SOURCES = ["fpts", "jj", "hw", "pff"]
+SHARP_SOURCES = ["fpts", "jj", "hw", "pff", "ds"]
 
 # Column mapping: pipeline output column -> baseline field
 COLUMN_MAP = {
@@ -35,7 +35,7 @@ COLUMN_MAP = {
 
 # Sharp source positional rank columns in the pipeline output
 SHARP_POS_COLUMNS = [
-    "fpts_POS RANK", "jj_POS RANK", "hw_POS RANK", "pff_POS RANK",
+    "fpts_POS RANK", "jj_POS RANK", "hw_POS RANK", "pff_POS RANK", "ds_POS RANK",
 ]
 
 DIVERGENCE_THRESHOLD = 12
@@ -78,7 +78,7 @@ def compute_sharp_consensus(df: pd.DataFrame) -> pd.DataFrame:
     matter) and converting back to overall via ADP's scarcity curve,
     the sharp consensus is format-neutral.
 
-    Step 1: Compute sharp_pos_rank per position = mean of 4 sharp source POS RANKs.
+    Step 1: Compute sharp_pos_rank per position = mean of 5 sharp source POS RANKs.
     Step 2: Build ADP scarcity curve per position (pos_rank → ADP overall).
     Step 3: Map each player's sharp_pos_rank through the curve → sharp_mapped_overall.
     Step 4: Re-rank the mapped values → sharp_consensus_rank.

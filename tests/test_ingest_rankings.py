@@ -66,22 +66,23 @@ class TestComputeSharpConsensus:
     def test_computes_sharp_pos_rank(self):
         df = _make_rankings_df()
         result = compute_sharp_consensus(df)
-        # WR Alpha: fpts=1, jj=1, hw=1, pff=2 → mean = 1.25
+        # WR Alpha: fpts=1, jj=1, hw=1, pff=2, ds=1 → mean = 1.2
         wr_alpha = result[result["PLAYER ID"] == "WRal01"].iloc[0]
-        assert wr_alpha["sharp_pos_rank"] == pytest.approx(1.25)
+        assert wr_alpha["sharp_pos_rank"] == pytest.approx(1.2)
 
     def test_source_count(self):
         df = _make_rankings_df()
         result = compute_sharp_consensus(df)
-        # All players have all 4 sharp sources
-        assert (result["sharp_source_count"] == 4).all()
+        # All players have all 5 sharp sources (fpts, jj, hw, pff, ds)
+        assert (result["sharp_source_count"] == 5).all()
 
     def test_source_count_with_missing(self):
         df = _make_rankings_df()
         df.loc[0, "hw_POS RANK"] = None
         df.loc[0, "pff_POS RANK"] = None
         result = compute_sharp_consensus(df)
-        assert result.iloc[0]["sharp_source_count"] == 2
+        # fpts, jj, ds remain (hw, pff dropped)
+        assert result.iloc[0]["sharp_source_count"] == 3
 
     def test_produces_overall_rank(self):
         df = _make_rankings_df()
@@ -94,19 +95,19 @@ class TestComputeSharpConsensus:
     def test_positional_divergence(self):
         df = _make_rankings_df()
         result = compute_sharp_consensus(df)
-        # QB Star: POS ADP = 1, sharp_pos_rank = mean(1,1,2,1) = 1.25
-        # adp_divergence_pos = 1 - 1.25 = -0.25
+        # QB Star: POS ADP = 1, sharp_pos_rank = mean(1,1,2,1,1) = 1.2
+        # adp_divergence_pos = 1 - 1.2 = -0.2
         qb = result[result["PLAYER ID"] == "QBSt01"].iloc[0]
-        assert qb["adp_divergence_pos"] == pytest.approx(-0.25)
+        assert qb["adp_divergence_pos"] == pytest.approx(-0.2)
 
     def test_hw_bias_neutralized(self):
         """HW's different positional view is averaged out, not amplified."""
         df = _make_rankings_df()
         result = compute_sharp_consensus(df)
-        # RB Alpha: fpts=1, jj=1, hw=2, pff=1 → sharp_pos = 1.25
-        # RB Beta:  fpts=2, jj=2, hw=1, pff=2 → sharp_pos = 1.75
+        # RB Alpha: fpts=1, jj=1, hw=2, pff=1, ds=1 → sharp_pos = 1.2
+        # RB Beta:  fpts=2, jj=2, hw=1, pff=2, ds=2 → sharp_pos = 1.8
         # HW disagrees on who's RB1 vs RB2, but the consensus still
-        # favors RB Alpha because 3/4 sources agree
+        # favors RB Alpha because 4/5 sources agree
         rb_alpha = result[result["PLAYER ID"] == "RBal01"].iloc[0]
         rb_beta = result[result["PLAYER ID"] == "RBbe01"].iloc[0]
         assert rb_alpha["sharp_pos_rank"] < rb_beta["sharp_pos_rank"]
@@ -124,7 +125,7 @@ class TestIngestRankings:
         df = _make_rankings_df()
         ingest_rankings(session, df, 2025, verbose=False)
         baseline = session.get(PlayerSeasonBaseline, "WRal01_2025")
-        assert baseline.sharp_pos_rank == pytest.approx(1.25)
+        assert baseline.sharp_pos_rank == pytest.approx(1.2)
 
     def test_stores_sharp_consensus_rank(self, session):
         df = _make_rankings_df()
@@ -161,7 +162,7 @@ class TestIngestRankings:
         })
         ingest_rankings(session, df, 2025, verbose=False)
         baseline = session.get(PlayerSeasonBaseline, "BigEd01_2025")
-        # ADP pos rank 15, sharp pos rank ~1.25 → divergence ~13.75
+        # ADP pos rank 15, sharp pos rank ~1.2 → divergence ~13.8
         assert baseline.adp_divergence_flag == 1
 
     def test_standardizes_team(self, session):

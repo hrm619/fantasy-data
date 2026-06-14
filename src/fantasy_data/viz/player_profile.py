@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 
 from fantasy_data.viz.theme import COLORS, apply_theme, color_for_mode, format_axis
 
-SHARP_SOURCES = {"FantasyPoints (fpts)", "LateRound (jj)", "Underdog (hw)", "PFF"}
+SHARP_SOURCES = {"FantasyPoints (fpts)", "LateRound (jj)", "Underdog (hw)", "PFF", "DraftShark (ds)"}
 
 
 def plot_player_source_breakdown(data: dict) -> go.Figure:

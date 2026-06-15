@@ -153,7 +153,6 @@ def ingest_pff(
     session.commit()
 
     if verbose:
-        print(f"PFF ingest: {stats['enriched']} players enriched, "
-              f"{stats['unmatched']} unmatched")
+        print(f"PFF ingest: {stats['enriched']} players enriched, {stats['unmatched']} unmatched")
 
     return stats

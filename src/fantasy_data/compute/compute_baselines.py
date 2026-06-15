@@ -134,9 +134,7 @@ def compute_all_baselines(
     )
 
     for (player_id,) in player_ids:
-        weighted = compute_weighted_baseline(
-            session, player_id, target_season, lookback_seasons, verbose=False
-        )
+        weighted = compute_weighted_baseline(session, player_id, target_season, lookback_seasons, verbose=False)
 
         if not weighted:
             stats["no_history"] += 1
@@ -174,7 +172,6 @@ def compute_all_baselines(
     session.commit()
 
     if verbose:
-        print(f"Baselines computed: {stats['computed']} players, "
-              f"{stats['no_history']} with no history")
+        print(f"Baselines computed: {stats['computed']} players, {stats['no_history']} with no history")
 
     return stats

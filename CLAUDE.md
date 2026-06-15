@@ -22,7 +22,7 @@ This is **fantasy-data** — the fantasy football data model, ETL, and edge iden
 # Install
 uv sync
 
-# Install with dev tools (pytest, ruff, mypy)
+# Install with dev tools (pytest, ruff, ty, pre-commit)
 uv sync --extra dev
 
 # Run tests (exclude viz unless plotly/scipy installed)
@@ -33,6 +33,14 @@ uv sync --extra viz && uv run pytest tests/test_viz.py -v
 
 # Run single test
 uv run pytest tests/test_compute.py::TestComputeTrustWeight -v
+
+# Lint, format, type-check (Astral tooling — gated in CI, see .github/workflows/ci.yml)
+uv run ruff check src/ scripts/ tests/         # lint
+uv run ruff format src/ scripts/ tests/        # format (black-compatible drop-in)
+uv run ty check src/ scripts/ tests/            # type check (gated in CI)
+
+# Install pre-commit hooks (ruff lint+format + ty run on commit)
+uv run pre-commit install
 
 # CLI help
 fantasy-data --help
@@ -142,7 +150,8 @@ Phase 2: Historical Data (2014-2024)
   fantasy-data ingest rp --dir "data-dev/Reception Perception WR Deep Dive"
 
 Phase 3: Current Season (2025)
-  fantasy-data ingest rankings --season 2025
+  fantasy-data ingest rankings --season 2025            # consolidate files already in update/
+  fantasy-data ingest rankings --season 2025 --refresh  # fetch all 6 automated sources first, then consolidate
   fantasy-data ingest pff --file data/pff_grades_2025.csv --season 2025
 
 Phase 4: Compute
@@ -189,4 +198,5 @@ This repo is part of the quant-edge platform. See `/Users/henrymarsh/Documents/q
 - **PFF data captured via browser network tab**: No API or CSV export. Capture JSON from PFF's internal API, then run `scripts/convert_pff_json.py` to produce CSV for ingest.
 - **Reception Perception file naming**: Pro WRs use `WR {Type} - 2023.csv` or `WR {Type} 2024-25.csv`. Draft prospects use `{Type} - 2025 Draft Prospects.csv`. The ingest handles both patterns.
 - **Coaching staff validated across all boundaries**: The 2023→2024→2025 continuity flags were cross-checked for consistency. Run `scripts/build_coaching_history.py` to regenerate historical coaching data.
-- **DB location**: Defaults to `fantasy_data.db` in the repo root. Override with `FANTASY_DATA_DB` env var.
+- **DB location**: Canonical location is `~/.fantasy-data/fantasy_data.db` — a stable home outside the repo so other projects can reference the same DB regardless of where they live on disk. Resolution order (`db.py`): explicit `db_path` arg → `FANTASY_DATA_DB` env var → `~/.fantasy-data/fantasy_data.db` → legacy in-repo `fantasy_data.db` (fallback for un-migrated checkouts). The parent dir is auto-created, so a fresh machine creates the DB in the canonical home on first `init-db`.
+- **Sharing the DB with other projects**: `fantasy-data` is the sole writer; consumers read-only. Add it as an editable local dependency via absolute path (`[tool.uv.sources] fantasy-data = { path = "/Users/henrymarsh/Documents/quant-edge/fantasy-data", editable = true }`) and import `fantasy_data.db` / `fantasy_data.models`. No copies — one canonical DB file. SQLite handles many concurrent readers; never run two writers.

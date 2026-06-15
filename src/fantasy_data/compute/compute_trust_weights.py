@@ -65,9 +65,7 @@ def populate_starting_qbs(session: Session, season: int) -> int:
     Returns the number of QB changes detected.
     """
     changes = 0
-    staffs = session.query(CoachingStaff).filter(
-        CoachingStaff.season == season
-    ).all()
+    staffs = session.query(CoachingStaff).filter(CoachingStaff.season == season).all()
 
     for staff in staffs:
         team = staff.team
@@ -133,9 +131,7 @@ def compute_all_trust_weights(
     if verbose and qb_changes:
         print(f"  QB changes detected: {qb_changes} teams")
 
-    baselines = session.query(PlayerSeasonBaseline).filter(
-        PlayerSeasonBaseline.season == season
-    ).all()
+    baselines = session.query(PlayerSeasonBaseline).filter(PlayerSeasonBaseline.season == season).all()
 
     for baseline in baselines:
         player = session.get(Player, baseline.player_id)
@@ -145,14 +141,20 @@ def compute_all_trust_weights(
 
         # Look up coaching continuity for this player's team in this season
         team = baseline.team or player.team
-        staff = session.query(CoachingStaff).filter(
-            CoachingStaff.team == team,
-            CoachingStaff.season == season,
-        ).first()
+        staff = (
+            session.query(CoachingStaff)
+            .filter(
+                CoachingStaff.team == team,
+                CoachingStaff.season == season,
+            )
+            .first()
+        )
 
-        hc_cont = staff.hc_continuity_flag if staff else 1
-        oc_cont = staff.oc_continuity_flag if staff else 1
-        qb_cont = staff.qb_continuity_flag if staff else 1
+        # Coalesce a missing flag (None) to the column default of 1 ("continuity"),
+        # but preserve a real 0 (a discontinuity), so `is not None` rather than `or 1`.
+        hc_cont = staff.hc_continuity_flag if staff and staff.hc_continuity_flag is not None else 1
+        oc_cont = staff.oc_continuity_flag if staff and staff.oc_continuity_flag is not None else 1
+        qb_cont = staff.qb_continuity_flag if staff and staff.qb_continuity_flag is not None else 1
 
         weight = compute_trust_weight(
             team_change_flag=player.team_change_flag or 0,
@@ -170,9 +172,7 @@ def compute_all_trust_weights(
 
         # Compute seasons_in_system from OC tenure
         if staff and staff.oc_year_with_team:
-            baseline.seasons_in_system = min(
-                staff.oc_year_with_team, player.years_pro or 1
-            )
+            baseline.seasons_in_system = min(staff.oc_year_with_team, player.years_pro or 1)
 
         # Set projection_uncertain_flag
         baseline.projection_uncertain_flag = 1 if weight < 0.7 else 0
@@ -182,7 +182,6 @@ def compute_all_trust_weights(
     session.commit()
 
     if verbose:
-        print(f"Trust weights computed: {stats['updated']} updated, "
-              f"{stats['skipped']} skipped")
+        print(f"Trust weights computed: {stats['updated']} updated, {stats['skipped']} skipped")
 
     return stats

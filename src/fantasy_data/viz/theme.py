@@ -52,6 +52,7 @@ def _install_inter() -> None:
         # Refresh font cache on Linux
         if system == "Linux":
             import subprocess
+
             subprocess.run(["fc-cache", "-f"], capture_output=True)  # noqa: S603, S607
     except OSError:
         logger.warning("Could not install Inter font (permissions?) — falling back to system sans-serif")
@@ -71,18 +72,14 @@ COLORS: dict[str, str] = {
     "text_tertiary": "#888888",
     "spine": "#DDDDDD",
     "gridline": "#EEEEEE",
-
     # Default data color — warm gray
     "data_default": "#8B8685",
-
     # Spotlight accent — desaturated steel blue
     "spotlight": "#4A7C98",
-
     # Diverging pair
     "diverging_pos": "#4A7C98",
     "diverging_neg": "#C4756B",
     "diverging_mid": "#D8D8D8",
-
     # Categorical (max 4 groups, similar luminance)
     "cat_1": "#4A7C98",
     "cat_2": "#C4756B",
@@ -246,9 +243,7 @@ def apply_theme(
     return fig
 
 
-def color_for_mode(
-    mode: str, n: int = 1, highlight_index: int | None = None
-) -> list[str]:
+def color_for_mode(mode: str, n: int = 1, highlight_index: int | None = None) -> list[str]:
     """Return a list of *n* hex colors for the given color mode.
 
     Modes
@@ -270,8 +265,7 @@ def color_for_mode(
     if mode == "categorical":
         if n > 4:
             raise ValueError(
-                f"Categorical mode supports at most 4 groups, got {n}. "
-                "Use a different encoding for more groups."
+                f"Categorical mode supports at most 4 groups, got {n}. Use a different encoding for more groups."
             )
         keys = ["cat_1", "cat_2", "cat_3", "cat_4"]
         return [COLORS[k] for k in keys[:n]]
@@ -317,9 +311,7 @@ def annotate_point(
     return fig
 
 
-def label_endpoint(
-    fig: go.Figure, trace_index: int, label: str
-) -> go.Figure:
+def label_endpoint(fig: go.Figure, trace_index: int, label: str) -> go.Figure:
     """Add a direct label at the rightmost point of a trace.
 
     Used as a replacement for legends when there are <=5 series.

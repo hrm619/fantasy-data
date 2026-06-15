@@ -19,10 +19,7 @@ from fantasy_data.models import Player
 from fantasy_data.standardize import standardize_player_name, standardize_team
 
 DEFAULT_NAME_KEY_PATH = (
-    Path(__file__).resolve().parents[4]
-    / "fantasy_data_pipeline"
-    / "data"
-    / "player_name_to_key.json"
+    Path(__file__).resolve().parents[4] / "fantasy_data_pipeline" / "data" / "player_name_to_key.json"
 )
 
 

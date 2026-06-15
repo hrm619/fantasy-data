@@ -22,11 +22,7 @@ from fantasy_data.models import Player, PlayerSeasonBaseline
 from fantasy_data.standardize import standardize_team
 
 DEFAULT_HISTORICAL_PATH = (
-    Path(__file__).resolve().parents[4]
-    / "fantasy_data_pipeline"
-    / "data"
-    / "fpts historical"
-    / "combined_data.csv"
+    Path(__file__).resolve().parents[4] / "fantasy_data_pipeline" / "data" / "fpts historical" / "combined_data.csv"
 )
 
 # Column mapping: CSV column -> baseline field
@@ -176,9 +172,11 @@ def ingest_historical(
 
     if verbose:
         total = stats["baselines_created"] + stats["baselines_updated"]
-        print(f"Historical ingest: {stats['players_created']} players created, "
-              f"{total} baselines ({stats['baselines_created']} new, "
-              f"{stats['baselines_updated']} updated), {stats['skipped']} skipped")
+        print(
+            f"Historical ingest: {stats['players_created']} players created, "
+            f"{total} baselines ({stats['baselines_created']} new, "
+            f"{stats['baselines_updated']} updated), {stats['skipped']} skipped"
+        )
 
     return stats
 

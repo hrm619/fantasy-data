@@ -25,13 +25,16 @@ class TestIngestPff:
     def test_unmatched_pff_players(self, session, seed_players):
         """PFF players not in the DB get logged as unmatched."""
         import pandas as pd
-        df = pd.DataFrame({
-            "player_id": ["PFF_UNKNOWN"],
-            "player": ["Unknown PFF Player"],
-            "position": ["TE"],
-            "team_abbr": ["NE"],
-            "games": [10],
-        })
+
+        df = pd.DataFrame(
+            {
+                "player_id": ["PFF_UNKNOWN"],
+                "player": ["Unknown PFF Player"],
+                "position": ["TE"],
+                "team_abbr": ["NE"],
+                "games": [10],
+            }
+        )
         stats = ingest_pff(session, df, 2024, verbose=False)
         assert stats["unmatched"] == 1
         assert stats["enriched"] == 0

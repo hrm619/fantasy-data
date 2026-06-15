@@ -57,17 +57,33 @@ BLOCKING_MAP = {
 
 # PFF position → our position mapping
 PFF_POSITION_MAP = {
-    "WR": "WR", "HB": "RB", "RB": "RB", "FB": "RB",
-    "TE": "TE", "QB": "QB",
-    "T": "OL", "G": "OL", "C": "OL",
-    "CB": "CB", "S": "S", "LB": "LB",
-    "DI": "DL", "ED": "EDGE",
+    "WR": "WR",
+    "HB": "RB",
+    "RB": "RB",
+    "FB": "RB",
+    "TE": "TE",
+    "QB": "QB",
+    "T": "OL",
+    "G": "OL",
+    "C": "OL",
+    "CB": "CB",
+    "S": "S",
+    "LB": "LB",
+    "DI": "DL",
+    "ED": "EDGE",
 }
 
 # PFF team abbreviation overrides
 PFF_TEAM_MAP = {
-    "LA": "LAR", "LV": "LV", "OAK": "LV", "SD": "LAC", "STL": "LAR",
-    "JAC": "JAX", "HST": "HOU", "CLT": "IND", "BLT": "BAL",
+    "LA": "LAR",
+    "LV": "LV",
+    "OAK": "LV",
+    "SD": "LAC",
+    "STL": "LAR",
+    "JAC": "JAX",
+    "HST": "HOU",
+    "CLT": "IND",
+    "BLT": "BAL",
     "ARZ": "ARI",
 }
 
@@ -83,7 +99,7 @@ def _normalize_team(team: str | None) -> str | None:
 def _build_pff_id_map(session: Session) -> dict[str, str]:
     """Build PFF ID → pipeline player_id map from existing Player records."""
     players = session.query(Player).filter(Player.pff_id.isnot(None)).all()
-    return {p.pff_id: p.player_id for p in players}
+    return {p.pff_id: p.player_id for p in players if p.pff_id is not None}
 
 
 def _build_name_map(session: Session) -> dict[str, str]:
@@ -185,14 +201,20 @@ def ingest_pff_bulk(
                 pff_id = str(row.get("player_id", ""))
                 name = str(row.get("player", ""))
                 position = str(row.get("position", ""))
-                team = _normalize_team(str(row.get("team_name", "")))
+                team = _normalize_team(str(row.get("team_name", ""))) or ""
 
                 if not pff_id or not name:
                     continue
 
                 player_id = _resolve_player(
-                    session, pff_id, name, position, team,
-                    pff_id_map, name_map, now_iso,
+                    session,
+                    pff_id,
+                    name,
+                    position,
+                    team,
+                    pff_id_map,
+                    name_map,
+                    now_iso,
                 )
                 if not player_id:
                     stats["unmatched"] += 1
@@ -240,8 +262,10 @@ def ingest_pff_bulk(
         session.commit()
 
     if verbose:
-        print(f"\nPFF bulk ingest: {stats['files']} files, "
-              f"{stats['enriched']} enriched, {stats['created']} baselines created, "
-              f"{stats['unmatched']} unmatched")
+        print(
+            f"\nPFF bulk ingest: {stats['files']} files, "
+            f"{stats['enriched']} enriched, {stats['created']} baselines created, "
+            f"{stats['unmatched']} unmatched"
+        )
 
     return stats

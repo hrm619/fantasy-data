@@ -70,6 +70,7 @@ class TestRankingsVariance:
 class TestTrustFlags:
     def test_returns_uncertain_players(self, session, seed_players, seed_coaching, seed_baselines):
         from fantasy_data.compute.compute_trust_weights import compute_all_trust_weights
+
         compute_all_trust_weights(session, 2024, verbose=False)
 
         results = get_trust_flags(session, 2024)

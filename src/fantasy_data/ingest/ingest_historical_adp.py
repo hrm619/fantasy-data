@@ -10,14 +10,11 @@ Only updates baselines where adp_consensus is currently NULL (does not
 overwrite 2025 rankings-derived ADP).
 """
 
-from datetime import datetime, timezone
-
 import requests
-import pandas as pd
 from sqlalchemy.orm import Session
 
 from fantasy_data.models import Player, PlayerSeasonBaseline
-from fantasy_data.standardize import standardize_player_name, standardize_team
+from fantasy_data.standardize import standardize_player_name
 
 FFC_API_URL = "https://fantasyfootballcalculator.com/api/v1/adp/ppr"
 
@@ -113,8 +110,10 @@ def ingest_historical_adp(
             print(f"    Matched: {season_matched}")
 
     if verbose:
-        print(f"\nHistorical ADP: {stats['seasons']} seasons, "
-              f"{stats['matched']} matched, {stats['unmatched']} unmatched, "
-              f"{stats['skipped_existing']} skipped (already had ADP)")
+        print(
+            f"\nHistorical ADP: {stats['seasons']} seasons, "
+            f"{stats['matched']} matched, {stats['unmatched']} unmatched, "
+            f"{stats['skipped_existing']} skipped (already had ADP)"
+        )
 
     return stats

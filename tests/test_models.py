@@ -4,7 +4,9 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from fantasy_data.models import (
-    Player, CoachingStaff, PlayerSeasonBaseline,
+    Player,
+    CoachingStaff,
+    PlayerSeasonBaseline,
 )
 
 
@@ -16,8 +18,7 @@ class TestPlayerModel:
         assert session.get(Player, "TestPl01").full_name == "Test Player"
 
     def test_player_has_pff_id_field(self, session):
-        p = Player(player_id="TestPl02", full_name="Test", position="QB",
-                    pff_id="PFF_EXT_999")
+        p = Player(player_id="TestPl02", full_name="Test", position="QB", pff_id="PFF_EXT_999")
         session.add(p)
         session.commit()
         assert session.get(Player, "TestPl02").pff_id == "PFF_EXT_999"
@@ -39,7 +40,9 @@ class TestPlayerModel:
 class TestCoachingStaff:
     def test_create_staff(self, session):
         s = CoachingStaff(
-            staff_id="DAL_2024", team="DAL", season=2024,
+            staff_id="DAL_2024",
+            team="DAL",
+            season=2024,
             head_coach="Mike McCarthy",
         )
         session.add(s)
@@ -59,8 +62,10 @@ class TestCoachingStaff:
 class TestPlayerSeasonBaseline:
     def test_create_baseline(self, session, seed_players):
         b = PlayerSeasonBaseline(
-            baseline_id="MahomPa01_2025", player_id="MahomPa01",
-            season=2025, team="KC",
+            baseline_id="MahomPa01_2025",
+            player_id="MahomPa01",
+            season=2025,
+            team="KC",
         )
         session.add(b)
         session.commit()
@@ -68,7 +73,8 @@ class TestPlayerSeasonBaseline:
 
     def test_fk_constraint(self, session):
         b = PlayerSeasonBaseline(
-            baseline_id="FAKE_2025", player_id="NONEXISTENT",
+            baseline_id="FAKE_2025",
+            player_id="NONEXISTENT",
             season=2025,
         )
         session.add(b)
@@ -77,8 +83,10 @@ class TestPlayerSeasonBaseline:
 
     def test_baseline_relationship(self, session, seed_players):
         b = PlayerSeasonBaseline(
-            baseline_id="MahomPa01_2025", player_id="MahomPa01",
-            season=2025, team="KC",
+            baseline_id="MahomPa01_2025",
+            player_id="MahomPa01",
+            season=2025,
+            team="KC",
         )
         session.add(b)
         session.commit()
@@ -89,4 +97,14 @@ class TestPlayerSeasonBaseline:
 class TestAllTablesCreated:
     def test_table_count(self, engine):
         from fantasy_data.models import Base
-        assert len(Base.metadata.tables) == 6
+
+        expected = {
+            "players",
+            "coaching_staff",
+            "player_season_baseline",
+            "target_competition",
+            "wr_reception_perception",
+            "player_week",
+            "qualitative_signals",
+        }
+        assert set(Base.metadata.tables) == expected

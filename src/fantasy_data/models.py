@@ -5,12 +5,16 @@ Seven core tables organized into three logical layers:
 - Role Signal (Baseline): player_season_baseline, target_competition
 - Observation & Signal: player_week (Phase 2), qualitative_signals (Phase 3)
 Plus: pipeline_id_map (bridge table for rankings pipeline integration)
+
+Columns use SQLAlchemy 2.0 typed declarations (`Mapped[...]` + `mapped_column`):
+non-optional annotations map to NOT NULL, `T | None` maps to nullable columns —
+matching the legacy `Column(..., nullable=...)` schema exactly while giving the
+type checker real attribute types.
 """
 
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Column,
     Float,
     Integer,
     String,
@@ -19,7 +23,7 @@ from sqlalchemy import (
     Index,
     UniqueConstraint,
 )
-from sqlalchemy.orm import DeclarativeBase, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 def _now_iso() -> str:
@@ -40,37 +44,37 @@ class Player(Base):
 
     __tablename__ = "players"
 
-    player_id = Column(String, primary_key=True)  # Pipeline PLAYER ID (e.g., McCaCh01)
-    pff_id = Column(String)  # PFF player ID (secondary, for grade joins)
-    gsis_id = Column(String)
-    sleeper_id = Column(String)
-    full_name = Column(String, nullable=False)
-    position = Column(String, nullable=False)  # QB, RB, WR, TE, K
-    position_group = Column(String)  # PASS_CATCHER, BACKFIELD, QB
-    route_tree_type = Column(String)  # SLOT, OUTSIDE, FLEX, INLINE_TE, MOVE_TE
-    team = Column(String)
-    jersey_number = Column(Integer)
-    age = Column(Float)
-    years_pro = Column(Integer)
-    draft_year = Column(Integer)
-    draft_round = Column(Integer)
-    draft_pick = Column(Integer)
-    college = Column(String)
-    height_inches = Column(Integer)
-    weight_lbs = Column(Integer)
-    forty_time = Column(Float)
-    athleticism_score = Column(Float)
-    speed_score = Column(Float)
-    team_change_flag = Column(Integer, default=0)
-    prev_team = Column(String)
-    contract_year_flag = Column(Integer, default=0)
-    injury_concern_flag = Column(Integer, default=0)
-    rookie_flag = Column(Integer, default=0)
-    is_active = Column(Integer, default=1)
-    created_at = Column(String, default=_now_iso)
-    updated_at = Column(String, default=_now_iso, onupdate=_now_iso)
+    player_id: Mapped[str] = mapped_column(String, primary_key=True)  # Pipeline PLAYER ID (e.g., McCaCh01)
+    pff_id: Mapped[str | None] = mapped_column(String)  # PFF player ID (secondary, for grade joins)
+    gsis_id: Mapped[str | None] = mapped_column(String)
+    sleeper_id: Mapped[str | None] = mapped_column(String)
+    full_name: Mapped[str] = mapped_column(String, nullable=False)
+    position: Mapped[str] = mapped_column(String, nullable=False)  # QB, RB, WR, TE, K
+    position_group: Mapped[str | None] = mapped_column(String)  # PASS_CATCHER, BACKFIELD, QB
+    route_tree_type: Mapped[str | None] = mapped_column(String)  # SLOT, OUTSIDE, FLEX, INLINE_TE, MOVE_TE
+    team: Mapped[str | None] = mapped_column(String)
+    jersey_number: Mapped[int | None] = mapped_column(Integer)
+    age: Mapped[float | None] = mapped_column(Float)
+    years_pro: Mapped[int | None] = mapped_column(Integer)
+    draft_year: Mapped[int | None] = mapped_column(Integer)
+    draft_round: Mapped[int | None] = mapped_column(Integer)
+    draft_pick: Mapped[int | None] = mapped_column(Integer)
+    college: Mapped[str | None] = mapped_column(String)
+    height_inches: Mapped[int | None] = mapped_column(Integer)
+    weight_lbs: Mapped[int | None] = mapped_column(Integer)
+    forty_time: Mapped[float | None] = mapped_column(Float)
+    athleticism_score: Mapped[float | None] = mapped_column(Float)
+    speed_score: Mapped[float | None] = mapped_column(Float)
+    team_change_flag: Mapped[int | None] = mapped_column(Integer, default=0)
+    prev_team: Mapped[str | None] = mapped_column(String)
+    contract_year_flag: Mapped[int | None] = mapped_column(Integer, default=0)
+    injury_concern_flag: Mapped[int | None] = mapped_column(Integer, default=0)
+    rookie_flag: Mapped[int | None] = mapped_column(Integer, default=0)
+    is_active: Mapped[int | None] = mapped_column(Integer, default=1)
+    created_at: Mapped[str | None] = mapped_column(String, default=_now_iso)
+    updated_at: Mapped[str | None] = mapped_column(String, default=_now_iso, onupdate=_now_iso)
 
-    baselines = relationship("PlayerSeasonBaseline", back_populates="player")
+    baselines: Mapped[list["PlayerSeasonBaseline"]] = relationship(back_populates="player")
 
     __table_args__ = (
         Index("ix_players_team", "team"),
@@ -84,26 +88,26 @@ class CoachingStaff(Base):
 
     __tablename__ = "coaching_staff"
 
-    staff_id = Column(String, primary_key=True)  # team + season composite
-    team = Column(String, nullable=False)
-    season = Column(Integer, nullable=False)
-    head_coach = Column(String, nullable=False)
-    offensive_coordinator = Column(String)
-    quarterbacks_coach = Column(String)
-    hc_year_with_team = Column(Integer)
-    oc_year_with_team = Column(Integer)
-    hc_continuity_flag = Column(Integer, default=0)
-    oc_continuity_flag = Column(Integer, default=0)
-    starting_qb = Column(String)  # Starting QB name (for audit/display)
-    qb_continuity_flag = Column(Integer, default=1)  # 0 = new starter vs prior season
-    system_tag = Column(String)  # MCVAY_TREE, SHANAHAN_ZONE, REID_WEST_COAST, etc.
-    pass_rate_tendency = Column(Float)
-    te_usage_tendency = Column(Float)
-    rb_pass_usage_tendency = Column(Float)
-    tempo = Column(String)  # FAST, MEDIUM, SLOW
-    notes = Column(Text)
-    created_at = Column(String, default=_now_iso)
-    updated_at = Column(String, default=_now_iso, onupdate=_now_iso)
+    staff_id: Mapped[str] = mapped_column(String, primary_key=True)  # team + season composite
+    team: Mapped[str] = mapped_column(String, nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    head_coach: Mapped[str] = mapped_column(String, nullable=False)
+    offensive_coordinator: Mapped[str | None] = mapped_column(String)
+    quarterbacks_coach: Mapped[str | None] = mapped_column(String)
+    hc_year_with_team: Mapped[int | None] = mapped_column(Integer)
+    oc_year_with_team: Mapped[int | None] = mapped_column(Integer)
+    hc_continuity_flag: Mapped[int | None] = mapped_column(Integer, default=0)
+    oc_continuity_flag: Mapped[int | None] = mapped_column(Integer, default=0)
+    starting_qb: Mapped[str | None] = mapped_column(String)  # Starting QB name (for audit/display)
+    qb_continuity_flag: Mapped[int | None] = mapped_column(Integer, default=1)  # 0 = new starter vs prior season
+    system_tag: Mapped[str | None] = mapped_column(String)  # MCVAY_TREE, SHANAHAN_ZONE, REID_WEST_COAST, etc.
+    pass_rate_tendency: Mapped[float | None] = mapped_column(Float)
+    te_usage_tendency: Mapped[float | None] = mapped_column(Float)
+    rb_pass_usage_tendency: Mapped[float | None] = mapped_column(Float)
+    tempo: Mapped[str | None] = mapped_column(String)  # FAST, MEDIUM, SLOW
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[str | None] = mapped_column(String, default=_now_iso)
+    updated_at: Mapped[str | None] = mapped_column(String, default=_now_iso, onupdate=_now_iso)
 
     __table_args__ = (
         Index("ix_coaching_team_season", "team", "season"),
@@ -121,115 +125,119 @@ class PlayerSeasonBaseline(Base):
 
     __tablename__ = "player_season_baseline"
 
-    baseline_id = Column(String, primary_key=True)  # player_id + season composite
-    player_id = Column(String, ForeignKey("players.player_id"), nullable=False)
-    season = Column(Integer, nullable=False)
-    team = Column(String)
-    games_played = Column(Integer)
-    games_started = Column(Integer)
-    data_trust_weight = Column(Float)  # 0-1, computed from coaching joins
-    hc_continuity = Column(Integer)
-    oc_continuity = Column(Integer)
-    seasons_in_system = Column(Integer)
+    baseline_id: Mapped[str] = mapped_column(String, primary_key=True)  # player_id + season composite
+    player_id: Mapped[str] = mapped_column(String, ForeignKey("players.player_id"), nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    team: Mapped[str | None] = mapped_column(String)
+    games_played: Mapped[int | None] = mapped_column(Integer)
+    games_started: Mapped[int | None] = mapped_column(Integer)
+    data_trust_weight: Mapped[float | None] = mapped_column(Float)  # 0-1, computed from coaching joins
+    hc_continuity: Mapped[int | None] = mapped_column(Integer)
+    oc_continuity: Mapped[int | None] = mapped_column(Integer)
+    seasons_in_system: Mapped[int | None] = mapped_column(Integer)
 
     # --- Opportunity Volume ---
-    snap_share = Column(Float)
-    route_participation_rate = Column(Float)
-    target_share = Column(Float)
-    rz_target_share = Column(Float)
-    ez_target_share = Column(Float)
-    carries_per_game = Column(Float)
-    rz_carry_share = Column(Float)
-    total_touches_per_game = Column(Float)
+    snap_share: Mapped[float | None] = mapped_column(Float)
+    route_participation_rate: Mapped[float | None] = mapped_column(Float)
+    target_share: Mapped[float | None] = mapped_column(Float)
+    rz_target_share: Mapped[float | None] = mapped_column(Float)
+    ez_target_share: Mapped[float | None] = mapped_column(Float)
+    carries_per_game: Mapped[float | None] = mapped_column(Float)
+    rz_carry_share: Mapped[float | None] = mapped_column(Float)
+    total_touches_per_game: Mapped[float | None] = mapped_column(Float)
 
     # --- Opportunity Quality ---
-    air_yards_share = Column(Float)
-    avg_depth_of_target = Column(Float)
-    avg_cushion = Column(Float)
-    avg_separation = Column(Float)
-    target_quality_rating = Column(Float)
-    route_grade_pff = Column(Float)
-    contested_target_rate = Column(Float)
+    air_yards_share: Mapped[float | None] = mapped_column(Float)
+    avg_depth_of_target: Mapped[float | None] = mapped_column(Float)
+    avg_cushion: Mapped[float | None] = mapped_column(Float)
+    avg_separation: Mapped[float | None] = mapped_column(Float)
+    target_quality_rating: Mapped[float | None] = mapped_column(Float)
+    route_grade_pff: Mapped[float | None] = mapped_column(Float)
+    contested_target_rate: Mapped[float | None] = mapped_column(Float)
 
     # --- Efficiency & Conversion ---
-    racr = Column(Float)
-    catch_rate = Column(Float)
-    expected_catch_rate = Column(Float)
-    catch_rate_over_expected = Column(Float)
-    yards_per_route_run = Column(Float)
-    yards_after_catch_per_rec = Column(Float)
-    broken_tackle_rate = Column(Float)
-    drop_rate = Column(Float)
-    pff_offense_grade = Column(Float)
-    pff_receiving_grade = Column(Float)
-    pff_pass_block_grade = Column(Float)
-    pff_run_blocking_grade = Column(Float)
-    pff_passing_grade = Column(Float)  # QB only
+    racr: Mapped[float | None] = mapped_column(Float)
+    catch_rate: Mapped[float | None] = mapped_column(Float)
+    expected_catch_rate: Mapped[float | None] = mapped_column(Float)
+    catch_rate_over_expected: Mapped[float | None] = mapped_column(Float)
+    yards_per_route_run: Mapped[float | None] = mapped_column(Float)
+    yards_after_catch_per_rec: Mapped[float | None] = mapped_column(Float)
+    broken_tackle_rate: Mapped[float | None] = mapped_column(Float)
+    drop_rate: Mapped[float | None] = mapped_column(Float)
+    pff_offense_grade: Mapped[float | None] = mapped_column(Float)
+    pff_receiving_grade: Mapped[float | None] = mapped_column(Float)
+    pff_pass_block_grade: Mapped[float | None] = mapped_column(Float)
+    pff_run_blocking_grade: Mapped[float | None] = mapped_column(Float)
+    pff_passing_grade: Mapped[float | None] = mapped_column(Float)  # QB only
 
     # --- Composite Demand ---
-    wopr = Column(Float)  # (1.5 * target_share) + (0.7 * air_yards_share)
-    dominator_rating = Column(Float)
-    market_share_score = Column(Float)
+    wopr: Mapped[float | None] = mapped_column(Float)  # (1.5 * target_share) + (0.7 * air_yards_share)
+    dominator_rating: Mapped[float | None] = mapped_column(Float)
+    market_share_score: Mapped[float | None] = mapped_column(Float)
 
     # --- Backfield-Specific (RB) ---
-    rb_role = Column(String)  # WORKHORSE, COMMITTEE, PASS_DOWN, CHANGE_OF_PACE
-    early_down_share = Column(Float)
-    third_down_carry_share = Column(Float)
-    third_down_target_share = Column(Float)
-    goal_line_carry_share = Column(Float)
-    pff_rush_grade = Column(Float)
-    yards_per_carry = Column(Float)
-    expected_yards_per_carry = Column(Float)
-    rush_yards_over_expected = Column(Float)
-    avg_box_count = Column(Float)
+    rb_role: Mapped[str | None] = mapped_column(String)  # WORKHORSE, COMMITTEE, PASS_DOWN, CHANGE_OF_PACE
+    early_down_share: Mapped[float | None] = mapped_column(Float)
+    third_down_carry_share: Mapped[float | None] = mapped_column(Float)
+    third_down_target_share: Mapped[float | None] = mapped_column(Float)
+    goal_line_carry_share: Mapped[float | None] = mapped_column(Float)
+    pff_rush_grade: Mapped[float | None] = mapped_column(Float)
+    yards_per_carry: Mapped[float | None] = mapped_column(Float)
+    expected_yards_per_carry: Mapped[float | None] = mapped_column(Float)
+    rush_yards_over_expected: Mapped[float | None] = mapped_column(Float)
+    avg_box_count: Mapped[float | None] = mapped_column(Float)
 
     # --- Market Calibration ---
-    adp_consensus = Column(Float)
-    adp_underdog = Column(Float)
-    adp_positional_rank = Column(Integer)
-    fp_projected_pts_ppr = Column(Float)
-    fp_projected_pts_std = Column(Float)
-    fp_positional_rank = Column(Integer)
-    sharp_pos_rank = Column(Float)  # within-position sharp consensus (mean of 4 sharp POS RANKs)
-    sharp_consensus_rank = Column(Float)  # format-neutral overall rank (via ADP scarcity curve)
-    adp_divergence_pos = Column(Float)  # positional: adp_pos_rank - sharp_pos_rank
-    adp_divergence_rank = Column(Integer)  # overall: ADP rank - sharp_consensus_rank
-    adp_divergence_flag = Column(Integer, default=0)  # abs(adp_divergence_pos) >= 12
-    projection_uncertain_flag = Column(Integer, default=0)
+    adp_consensus: Mapped[float | None] = mapped_column(Float)
+    adp_underdog: Mapped[float | None] = mapped_column(Float)
+    adp_positional_rank: Mapped[int | None] = mapped_column(Integer)
+    fp_projected_pts_ppr: Mapped[float | None] = mapped_column(Float)
+    fp_projected_pts_std: Mapped[float | None] = mapped_column(Float)
+    fp_positional_rank: Mapped[int | None] = mapped_column(Integer)
+    sharp_pos_rank: Mapped[float | None] = mapped_column(
+        Float
+    )  # within-position sharp consensus (mean of 4 sharp POS RANKs)
+    sharp_consensus_rank: Mapped[float | None] = mapped_column(
+        Float
+    )  # format-neutral overall rank (via ADP scarcity curve)
+    adp_divergence_pos: Mapped[float | None] = mapped_column(Float)  # positional: adp_pos_rank - sharp_pos_rank
+    adp_divergence_rank: Mapped[int | None] = mapped_column(Integer)  # overall: ADP rank - sharp_consensus_rank
+    adp_divergence_flag: Mapped[int | None] = mapped_column(Integer, default=0)  # abs(adp_divergence_pos) >= 12
+    projection_uncertain_flag: Mapped[int | None] = mapped_column(Integer, default=0)
 
     # --- Per-Source Rankings (from rankings pipeline) ---
-    rankings_avg_overall = Column(Float)
-    rankings_avg_positional = Column(Float)  # mean of ALL sources
-    rankings_hw_positional = Column(Integer)
-    rankings_pff_positional = Column(Integer)
-    rankings_ds_positional = Column(Integer)
-    rankings_jj_positional = Column(Integer)
-    rankings_fpts_positional = Column(Integer)
-    rankings_source_count = Column(Integer)
-    ecr_adp_delta = Column(Float)
-    ecr_avg_rank_delta = Column(Float)
-    rankings_last_updated = Column(String)
+    rankings_avg_overall: Mapped[float | None] = mapped_column(Float)
+    rankings_avg_positional: Mapped[float | None] = mapped_column(Float)  # mean of ALL sources
+    rankings_hw_positional: Mapped[int | None] = mapped_column(Integer)
+    rankings_pff_positional: Mapped[int | None] = mapped_column(Integer)
+    rankings_ds_positional: Mapped[int | None] = mapped_column(Integer)
+    rankings_jj_positional: Mapped[int | None] = mapped_column(Integer)
+    rankings_fpts_positional: Mapped[int | None] = mapped_column(Integer)
+    rankings_source_count: Mapped[int | None] = mapped_column(Integer)
+    ecr_adp_delta: Mapped[float | None] = mapped_column(Float)
+    ecr_avg_rank_delta: Mapped[float | None] = mapped_column(Float)
+    rankings_last_updated: Mapped[str | None] = mapped_column(String)
 
     # --- FTN Scheme Context (charting data, 2022+) ---
-    play_action_target_pct = Column(Float)  # % of targets on play-action
-    screen_target_pct = Column(Float)  # % of targets on screen passes
-    contested_ball_pct = Column(Float)  # % of targets that were contested (FTN)
-    catchable_ball_pct = Column(Float)  # % of targets that were catchable
-    created_reception_pct = Column(Float)  # % of catches WR-created (not schemed)
-    true_drop_rate = Column(Float)  # drops / catchable balls (FTN-charted)
+    play_action_target_pct: Mapped[float | None] = mapped_column(Float)  # % of targets on play-action
+    screen_target_pct: Mapped[float | None] = mapped_column(Float)  # % of targets on screen passes
+    contested_ball_pct: Mapped[float | None] = mapped_column(Float)  # % of targets that were contested (FTN)
+    catchable_ball_pct: Mapped[float | None] = mapped_column(Float)  # % of targets that were catchable
+    created_reception_pct: Mapped[float | None] = mapped_column(Float)  # % of catches WR-created (not schemed)
+    true_drop_rate: Mapped[float | None] = mapped_column(Float)  # drops / catchable balls (FTN-charted)
 
     # --- Scoring & Fantasy Output ---
-    fantasy_pts_ppr = Column(Float)
-    fantasy_pts_std = Column(Float)
-    fantasy_pts_half = Column(Float)
-    fpts_per_game_ppr = Column(Float)
-    fpts_per_game_std = Column(Float)
-    td_rate = Column(Float)
-    consistency_score = Column(Float)
-    boom_rate = Column(Float)
-    bust_rate = Column(Float)
+    fantasy_pts_ppr: Mapped[float | None] = mapped_column(Float)
+    fantasy_pts_std: Mapped[float | None] = mapped_column(Float)
+    fantasy_pts_half: Mapped[float | None] = mapped_column(Float)
+    fpts_per_game_ppr: Mapped[float | None] = mapped_column(Float)
+    fpts_per_game_std: Mapped[float | None] = mapped_column(Float)
+    td_rate: Mapped[float | None] = mapped_column(Float)
+    consistency_score: Mapped[float | None] = mapped_column(Float)
+    boom_rate: Mapped[float | None] = mapped_column(Float)
+    bust_rate: Mapped[float | None] = mapped_column(Float)
 
-    player = relationship("Player", back_populates="baselines")
+    player: Mapped["Player"] = relationship(back_populates="baselines")
 
     __table_args__ = (
         Index("ix_baseline_player", "player_id"),
@@ -244,21 +252,21 @@ class TargetCompetition(Base):
 
     __tablename__ = "target_competition"
 
-    competition_id = Column(String, primary_key=True)  # player + season + competitor
-    player_id = Column(String, ForeignKey("players.player_id"), nullable=False)
-    season = Column(Integer, nullable=False)
-    team = Column(String, nullable=False)
-    competitor_player_id = Column(String, ForeignKey("players.player_id"))
-    competitor_name = Column(String)
-    competitor_position = Column(String)
-    competitor_route_type = Column(String)
-    route_overlap_score = Column(Float)  # 0-1
-    competition_type = Column(String)  # DIRECT, VOLUME, NONE
-    competition_source = Column(String)  # DRAFT, FREE_AGENT, TRADE, RETURNING
-    competitor_draft_round = Column(Integer)
-    expected_role_impact = Column(Float)  # -1 to 0
-    notes = Column(Text)
-    created_at = Column(String, default=_now_iso)
+    competition_id: Mapped[str] = mapped_column(String, primary_key=True)  # player + season + competitor
+    player_id: Mapped[str] = mapped_column(String, ForeignKey("players.player_id"), nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    team: Mapped[str] = mapped_column(String, nullable=False)
+    competitor_player_id: Mapped[str | None] = mapped_column(String, ForeignKey("players.player_id"))
+    competitor_name: Mapped[str | None] = mapped_column(String)
+    competitor_position: Mapped[str | None] = mapped_column(String)
+    competitor_route_type: Mapped[str | None] = mapped_column(String)
+    route_overlap_score: Mapped[float | None] = mapped_column(Float)  # 0-1
+    competition_type: Mapped[str | None] = mapped_column(String)  # DIRECT, VOLUME, NONE
+    competition_source: Mapped[str | None] = mapped_column(String)  # DRAFT, FREE_AGENT, TRADE, RETURNING
+    competitor_draft_round: Mapped[int | None] = mapped_column(Integer)
+    expected_role_impact: Mapped[float | None] = mapped_column(Float)  # -1 to 0
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[str | None] = mapped_column(String, default=_now_iso)
 
     __table_args__ = (
         Index("ix_competition_player", "player_id"),
@@ -276,67 +284,67 @@ class WrReceptionPerception(Base):
 
     __tablename__ = "wr_reception_perception"
 
-    rp_id = Column(String, primary_key=True)  # player_id + season
-    player_id = Column(String, ForeignKey("players.player_id"), nullable=False)
-    season = Column(Integer, nullable=False)
-    is_prospect = Column(Integer, default=0)  # 1 = draft prospect (college stats)
+    rp_id: Mapped[str] = mapped_column(String, primary_key=True)  # player_id + season
+    player_id: Mapped[str] = mapped_column(String, ForeignKey("players.player_id"), nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_prospect: Mapped[int | None] = mapped_column(Integer, default=0)  # 1 = draft prospect (college stats)
 
     # Coverage success rates (0-100 scale)
-    routes_charted = Column(Integer)
-    success_rate_man = Column(Float)
-    success_rate_zone = Column(Float)
-    success_rate_press = Column(Float)
-    success_rate_double = Column(Float)
-    pct_man = Column(Float)
-    pct_zone = Column(Float)
-    pct_press = Column(Float)
-    pct_doubled = Column(Float)
+    routes_charted: Mapped[int | None] = mapped_column(Integer)
+    success_rate_man: Mapped[float | None] = mapped_column(Float)
+    success_rate_zone: Mapped[float | None] = mapped_column(Float)
+    success_rate_press: Mapped[float | None] = mapped_column(Float)
+    success_rate_double: Mapped[float | None] = mapped_column(Float)
+    pct_man: Mapped[float | None] = mapped_column(Float)
+    pct_zone: Mapped[float | None] = mapped_column(Float)
+    pct_press: Mapped[float | None] = mapped_column(Float)
+    pct_doubled: Mapped[float | None] = mapped_column(Float)
 
     # Route tree distribution (% of routes, 0-100)
-    pct_screen = Column(Float)
-    pct_slant = Column(Float)
-    pct_curl = Column(Float)
-    pct_dig = Column(Float)
-    pct_post = Column(Float)
-    pct_nine = Column(Float)
-    pct_corner = Column(Float)
-    pct_out = Column(Float)
-    pct_comeback = Column(Float)
-    pct_flat = Column(Float)
+    pct_screen: Mapped[float | None] = mapped_column(Float)
+    pct_slant: Mapped[float | None] = mapped_column(Float)
+    pct_curl: Mapped[float | None] = mapped_column(Float)
+    pct_dig: Mapped[float | None] = mapped_column(Float)
+    pct_post: Mapped[float | None] = mapped_column(Float)
+    pct_nine: Mapped[float | None] = mapped_column(Float)
+    pct_corner: Mapped[float | None] = mapped_column(Float)
+    pct_out: Mapped[float | None] = mapped_column(Float)
+    pct_comeback: Mapped[float | None] = mapped_column(Float)
+    pct_flat: Mapped[float | None] = mapped_column(Float)
 
     # Alignment (% of snaps, 0-100)
-    pct_outside = Column(Float)
-    pct_slot = Column(Float)
-    pct_inline = Column(Float)
-    pct_backfield = Column(Float)
+    pct_outside: Mapped[float | None] = mapped_column(Float)
+    pct_slot: Mapped[float | None] = mapped_column(Float)
+    pct_inline: Mapped[float | None] = mapped_column(Float)
+    pct_backfield: Mapped[float | None] = mapped_column(Float)
 
     # Target efficiency
-    route_target_rate = Column(Float)
-    route_catch_rate = Column(Float)
-    catch_rate_rp = Column(Float)
-    drop_rate_rp = Column(Float)
+    route_target_rate: Mapped[float | None] = mapped_column(Float)
+    route_catch_rate: Mapped[float | None] = mapped_column(Float)
+    catch_rate_rp: Mapped[float | None] = mapped_column(Float)
+    drop_rate_rp: Mapped[float | None] = mapped_column(Float)
 
     # Contested catch
-    contested_target_rate_rp = Column(Float)
-    contested_catch_rate_rp = Column(Float)
+    contested_target_rate_rp: Mapped[float | None] = mapped_column(Float)
+    contested_catch_rate_rp: Mapped[float | None] = mapped_column(Float)
 
     # Tackle breaking / YAC
-    tackle_break_opportunities = Column(Integer)
-    first_contact_drop_pct = Column(Float)
-    one_broken_tackle_pct = Column(Float)
-    two_plus_broken_tackle_pct = Column(Float)
+    tackle_break_opportunities: Mapped[int | None] = mapped_column(Integer)
+    first_contact_drop_pct: Mapped[float | None] = mapped_column(Float)
+    one_broken_tackle_pct: Mapped[float | None] = mapped_column(Float)
+    two_plus_broken_tackle_pct: Mapped[float | None] = mapped_column(Float)
 
     # Route-level success rates (best routes)
-    success_rate_slant = Column(Float)
-    success_rate_curl = Column(Float)
-    success_rate_dig = Column(Float)
-    success_rate_post = Column(Float)
-    success_rate_nine = Column(Float)
-    success_rate_corner = Column(Float)
-    success_rate_out = Column(Float)
-    success_rate_screen = Column(Float)
+    success_rate_slant: Mapped[float | None] = mapped_column(Float)
+    success_rate_curl: Mapped[float | None] = mapped_column(Float)
+    success_rate_dig: Mapped[float | None] = mapped_column(Float)
+    success_rate_post: Mapped[float | None] = mapped_column(Float)
+    success_rate_nine: Mapped[float | None] = mapped_column(Float)
+    success_rate_corner: Mapped[float | None] = mapped_column(Float)
+    success_rate_out: Mapped[float | None] = mapped_column(Float)
+    success_rate_screen: Mapped[float | None] = mapped_column(Float)
 
-    created_at = Column(String, default=_now_iso)
+    created_at: Mapped[str | None] = mapped_column(String, default=_now_iso)
 
     __table_args__ = (
         Index("ix_rp_player", "player_id"),
@@ -355,27 +363,27 @@ class PlayerWeek(Base):
 
     __tablename__ = "player_week"
 
-    week_id = Column(String, primary_key=True)  # player_id + season + week
-    player_id = Column(String, ForeignKey("players.player_id"), nullable=False)
-    season = Column(Integer, nullable=False)
-    week = Column(Integer, nullable=False)
-    team = Column(String)
-    opponent = Column(String)
-    game_id = Column(String)
-    snap_share_week = Column(Float)
-    target_share_week = Column(Float)
-    air_yards_share_week = Column(Float)
-    rz_target_share_week = Column(Float)
-    carries_week = Column(Integer)
-    routes_run_week = Column(Integer)
-    fantasy_pts_ppr_week = Column(Float)
-    fantasy_pts_std_week = Column(Float)
-    opponent_cb1_name = Column(String)
-    shadow_covered_flag = Column(Integer, default=0)
-    game_script = Column(String)  # POSITIVE, NEGATIVE, NEUTRAL
-    team_implied_total = Column(Float)
-    matchup_adjustment = Column(Float)
-    created_at = Column(String, default=_now_iso)
+    week_id: Mapped[str] = mapped_column(String, primary_key=True)  # player_id + season + week
+    player_id: Mapped[str] = mapped_column(String, ForeignKey("players.player_id"), nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    team: Mapped[str | None] = mapped_column(String)
+    opponent: Mapped[str | None] = mapped_column(String)
+    game_id: Mapped[str | None] = mapped_column(String)
+    snap_share_week: Mapped[float | None] = mapped_column(Float)
+    target_share_week: Mapped[float | None] = mapped_column(Float)
+    air_yards_share_week: Mapped[float | None] = mapped_column(Float)
+    rz_target_share_week: Mapped[float | None] = mapped_column(Float)
+    carries_week: Mapped[int | None] = mapped_column(Integer)
+    routes_run_week: Mapped[int | None] = mapped_column(Integer)
+    fantasy_pts_ppr_week: Mapped[float | None] = mapped_column(Float)
+    fantasy_pts_std_week: Mapped[float | None] = mapped_column(Float)
+    opponent_cb1_name: Mapped[str | None] = mapped_column(String)
+    shadow_covered_flag: Mapped[int | None] = mapped_column(Integer, default=0)
+    game_script: Mapped[str | None] = mapped_column(String)  # POSITIVE, NEGATIVE, NEUTRAL
+    team_implied_total: Mapped[float | None] = mapped_column(Float)
+    matchup_adjustment: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[str | None] = mapped_column(String, default=_now_iso)
 
     __table_args__ = (
         Index("ix_player_week_player", "player_id"),
@@ -389,34 +397,32 @@ class QualitativeSignal(Base):
 
     __tablename__ = "qualitative_signals"
 
-    signal_id = Column(String, primary_key=True)  # UUID
-    scope_type = Column(String, nullable=False)  # PLAYER or TEAM_SCHEME
-    player_id = Column(String, ForeignKey("players.player_id"))
-    team = Column(String, nullable=False)
-    season = Column(Integer, nullable=False)
-    week_applicable = Column(Integer)
-    signal_type = Column(String, nullable=False)
-    signal_direction = Column(String)  # POSITIVE, NEGATIVE, NEUTRAL
-    signal_summary = Column(Text, nullable=False)
-    raw_excerpt = Column(Text)
-    source_name = Column(String)
-    source_episode = Column(String)
-    source_url = Column(String)
-    source_timestamp = Column(String)
-    analyst_name = Column(String)
-    credibility_tier = Column(Integer)  # 1=core sharp, 2=reliable, 3=supplemental
-    confidence_score = Column(Float)
-    recency_weight = Column(Float)
-    hypothesis_id = Column(String)
-    validated_flag = Column(Integer, default=0)
-    validation_result = Column(String)  # CONFIRMED, REJECTED, INCONCLUSIVE, PENDING
-    created_at = Column(String, default=_now_iso)
-    updated_at = Column(String, default=_now_iso, onupdate=_now_iso)
+    signal_id: Mapped[str] = mapped_column(String, primary_key=True)  # UUID
+    scope_type: Mapped[str] = mapped_column(String, nullable=False)  # PLAYER or TEAM_SCHEME
+    player_id: Mapped[str | None] = mapped_column(String, ForeignKey("players.player_id"))
+    team: Mapped[str] = mapped_column(String, nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    week_applicable: Mapped[int | None] = mapped_column(Integer)
+    signal_type: Mapped[str] = mapped_column(String, nullable=False)
+    signal_direction: Mapped[str | None] = mapped_column(String)  # POSITIVE, NEGATIVE, NEUTRAL
+    signal_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_excerpt: Mapped[str | None] = mapped_column(Text)
+    source_name: Mapped[str | None] = mapped_column(String)
+    source_episode: Mapped[str | None] = mapped_column(String)
+    source_url: Mapped[str | None] = mapped_column(String)
+    source_timestamp: Mapped[str | None] = mapped_column(String)
+    analyst_name: Mapped[str | None] = mapped_column(String)
+    credibility_tier: Mapped[int | None] = mapped_column(Integer)  # 1=core sharp, 2=reliable, 3=supplemental
+    confidence_score: Mapped[float | None] = mapped_column(Float)
+    recency_weight: Mapped[float | None] = mapped_column(Float)
+    hypothesis_id: Mapped[str | None] = mapped_column(String)
+    validated_flag: Mapped[int | None] = mapped_column(Integer, default=0)
+    validation_result: Mapped[str | None] = mapped_column(String)  # CONFIRMED, REJECTED, INCONCLUSIVE, PENDING
+    created_at: Mapped[str | None] = mapped_column(String, default=_now_iso)
+    updated_at: Mapped[str | None] = mapped_column(String, default=_now_iso, onupdate=_now_iso)
 
     __table_args__ = (
         Index("ix_signal_player", "player_id"),
         Index("ix_signal_team_season", "team", "season"),
         Index("ix_signal_type", "signal_type"),
     )
-
-

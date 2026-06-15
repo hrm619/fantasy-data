@@ -108,10 +108,15 @@ def ingest_reception_perception(
     tackle_df = _load_csvs(data_path, "Tackle Breaking")
 
     if verbose:
-        for name, df in [("Coverage", coverage_df), ("Route%", route_pct_df),
-                         ("RouteSuccess", route_success_df), ("Alignment", alignment_df),
-                         ("Target", target_df), ("Contested", contested_df),
-                         ("Tackle", tackle_df)]:
+        for name, df in [
+            ("Coverage", coverage_df),
+            ("Route%", route_pct_df),
+            ("RouteSuccess", route_success_df),
+            ("Alignment", alignment_df),
+            ("Target", target_df),
+            ("Contested", contested_df),
+            ("Tackle", tackle_df),
+        ]:
             print(f"  {name}: {len(df)} rows")
 
     # Build a set of all (player, year) pairs across all dataframes
@@ -190,9 +195,11 @@ def ingest_reception_perception(
     session.commit()
 
     if verbose:
-        print(f"\nRP ingest: {stats['records']} records, "
-              f"{stats['unmatched']} unmatched, "
-              f"{stats['route_types_set']} route_tree_types set")
+        print(
+            f"\nRP ingest: {stats['records']} records, "
+            f"{stats['unmatched']} unmatched, "
+            f"{stats['route_types_set']} route_tree_types set"
+        )
 
     return stats
 

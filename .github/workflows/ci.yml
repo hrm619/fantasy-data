@@ -13,24 +13,15 @@ jobs:
       matrix:
         python-version: ["3.13"]
 
-    # All `run:` steps execute from the fantasy-data checkout. fantasy-data depends
-    # on fantasy_data_pipeline as an editable sibling (`../fantasy_data_pipeline` in
-    # pyproject), so both repos are checked out side by side under the workspace.
-    defaults:
-      run:
-        working-directory: fantasy-data
-
     steps:
-      - name: Check out fantasy-data
-        uses: actions/checkout@v4
-        with:
-          path: fantasy-data
+      - uses: actions/checkout@v4
 
       - name: Check out fantasy_data_pipeline (editable sibling dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: hrm619/fantasy_data_pipeline
-          path: fantasy_data_pipeline
+        # fantasy-data depends on fantasy_data_pipeline via an editable local path
+        # (`../fantasy_data_pipeline` in pyproject). Clone it one level up from this
+        # repo so that relative path resolves. Keeping fantasy-data at the workspace
+        # root means uv's venv and ty's environment discovery stay consistent.
+        run: git clone --depth 1 https://github.com/hrm619/fantasy_data_pipeline.git ../fantasy_data_pipeline
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5

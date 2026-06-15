@@ -61,9 +61,7 @@ def compute_team_competition(
             if player.player_id == competitor.player_id:
                 continue
 
-            overlap = compute_route_overlap(
-                player.route_tree_type, competitor.route_tree_type
-            )
+            overlap = compute_route_overlap(player.route_tree_type, competitor.route_tree_type)
 
             if overlap <= 0.1:
                 comp_type = "NONE"

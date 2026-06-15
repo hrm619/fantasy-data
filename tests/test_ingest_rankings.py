@@ -13,32 +13,48 @@ from fantasy_data.ingest.ingest_rankings import (
 
 def _make_rankings_df():
     """Build a small but realistic DataFrame for testing the scarcity curve logic."""
-    return pd.DataFrame({
-        "PLAYER NAME": [
-            "QB Star", "RB Alpha", "WR Alpha", "WR Beta",
-            "RB Beta", "TE Alpha", "QB Backup", "WR Gamma", "TE Beta",
-        ],
-        "PLAYER ID": [
-            "QBSt01", "RBal01", "WRal01", "WRbe01",
-            "RBbe01", "TEal01", "QBba01", "WRga01", "TEbe01",
-        ],
-        "POS": ["QB", "RB", "WR", "WR", "RB", "TE", "QB", "WR", "TE"],
-        "TEAM": ["KC", "ATL", "CIN", "DAL", "PHI", "ARI", "BUF", "DET", "MIA"],
-        # ADP provides the scarcity curve
-        "ADP": [5.0, 2.0, 1.0, 7.0, 6.0, 12.0, 20.0, 15.0, 25.0],
-        "POS ADP": [1, 1, 1, 2, 2, 1, 2, 3, 2],
-        # Sharp source positional ranks
-        "fpts_POS RANK": [1, 1, 1, 2, 2, 1, 2, 3, 2],
-        "jj_POS RANK": [1, 1, 1, 3, 2, 1, 2, 3, 2],
-        "hw_POS RANK": [2, 2, 1, 2, 1, 1, 2, 3, 2],  # HW has different view
-        "pff_POS RANK": [1, 1, 2, 2, 2, 1, 2, 4, 2],
-        "ds_POS RANK": [1, 1, 1, 2, 2, 1, 2, 3, 2],
-        "avg_RK": [5.0, 2.0, 1.0, 7.0, 6.0, 12.0, 20.0, 15.0, 25.0],
-        "avg_POS RANK": [1.0, 1.0, 1.0, 2.0, 2.0, 1.0, 2.0, 3.0, 2.0],
-        "fp_POS RANK": [1, 1, 1, 2, 2, 1, 2, 3, 2],
-        "ECR ADP Delta": [0, 0, 0, 0, 0, 0, 0, 0, 0],
-        "ECR Delta": [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    })
+    return pd.DataFrame(
+        {
+            "PLAYER NAME": [
+                "QB Star",
+                "RB Alpha",
+                "WR Alpha",
+                "WR Beta",
+                "RB Beta",
+                "TE Alpha",
+                "QB Backup",
+                "WR Gamma",
+                "TE Beta",
+            ],
+            "PLAYER ID": [
+                "QBSt01",
+                "RBal01",
+                "WRal01",
+                "WRbe01",
+                "RBbe01",
+                "TEal01",
+                "QBba01",
+                "WRga01",
+                "TEbe01",
+            ],
+            "POS": ["QB", "RB", "WR", "WR", "RB", "TE", "QB", "WR", "TE"],
+            "TEAM": ["KC", "ATL", "CIN", "DAL", "PHI", "ARI", "BUF", "DET", "MIA"],
+            # ADP provides the scarcity curve
+            "ADP": [5.0, 2.0, 1.0, 7.0, 6.0, 12.0, 20.0, 15.0, 25.0],
+            "POS ADP": [1, 1, 1, 2, 2, 1, 2, 3, 2],
+            # Sharp source positional ranks
+            "fpts_POS RANK": [1, 1, 1, 2, 2, 1, 2, 3, 2],
+            "jj_POS RANK": [1, 1, 1, 3, 2, 1, 2, 3, 2],
+            "hw_POS RANK": [2, 2, 1, 2, 1, 1, 2, 3, 2],  # HW has different view
+            "pff_POS RANK": [1, 1, 2, 2, 2, 1, 2, 4, 2],
+            "ds_POS RANK": [1, 1, 1, 2, 2, 1, 2, 3, 2],
+            "avg_RK": [5.0, 2.0, 1.0, 7.0, 6.0, 12.0, 20.0, 15.0, 25.0],
+            "avg_POS RANK": [1.0, 1.0, 1.0, 2.0, 2.0, 1.0, 2.0, 3.0, 2.0],
+            "fp_POS RANK": [1, 1, 1, 2, 2, 1, 2, 3, 2],
+            "ECR ADP Delta": [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            "ECR Delta": [0, 0, 0, 0, 0, 0, 0, 0, 0],
+        }
+    )
 
 
 class TestBuildScarcityCurves:
@@ -142,38 +158,51 @@ class TestIngestRankings:
 
     def test_sets_divergence_flag_on_positional(self, session):
         """Large positional divergence sets the flag."""
-        df = pd.DataFrame({
-            "PLAYER NAME": ["Big Edge WR", "Control RB"],
-            "PLAYER ID": ["BigEd01", "ConRB01"],
-            "POS": ["WR", "RB"],
-            "TEAM": ["KC", "SF"],
-            "ADP": [30.0, 5.0],
-            "POS ADP": [15, 2],
-            "fpts_POS RANK": [1, 1],
-            "jj_POS RANK": [1, 1],
-            "hw_POS RANK": [1, 2],
-            "pff_POS RANK": [2, 1],
-            "ds_POS RANK": [1, 1],
-            "avg_RK": [30.0, 5.0],
-            "avg_POS RANK": [15.0, 2.0],
-            "fp_POS RANK": [15, 2],
-            "ECR ADP Delta": [0, 0],
-            "ECR Delta": [0, 0],
-        })
+        df = pd.DataFrame(
+            {
+                "PLAYER NAME": ["Big Edge WR", "Control RB"],
+                "PLAYER ID": ["BigEd01", "ConRB01"],
+                "POS": ["WR", "RB"],
+                "TEAM": ["KC", "SF"],
+                "ADP": [30.0, 5.0],
+                "POS ADP": [15, 2],
+                "fpts_POS RANK": [1, 1],
+                "jj_POS RANK": [1, 1],
+                "hw_POS RANK": [1, 2],
+                "pff_POS RANK": [2, 1],
+                "ds_POS RANK": [1, 1],
+                "avg_RK": [30.0, 5.0],
+                "avg_POS RANK": [15.0, 2.0],
+                "fp_POS RANK": [15, 2],
+                "ECR ADP Delta": [0, 0],
+                "ECR Delta": [0, 0],
+            }
+        )
         ingest_rankings(session, df, 2025, verbose=False)
         baseline = session.get(PlayerSeasonBaseline, "BigEd01_2025")
         # ADP pos rank 15, sharp pos rank ~1.2 → divergence ~13.8
         assert baseline.adp_divergence_flag == 1
 
     def test_standardizes_team(self, session):
-        df = pd.DataFrame({
-            "PLAYER NAME": ["Test"], "PLAYER ID": ["Test01"],
-            "POS": ["QB"], "TEAM": ["JAC"],
-            "ADP": [1.0], "POS ADP": [1],
-            "fpts_POS RANK": [1], "jj_POS RANK": [1],
-            "hw_POS RANK": [1], "pff_POS RANK": [1],
-            "ds_POS RANK": [1], "avg_RK": [1.0], "avg_POS RANK": [1.0],
-            "fp_POS RANK": [1], "ECR ADP Delta": [0], "ECR Delta": [0],
-        })
+        df = pd.DataFrame(
+            {
+                "PLAYER NAME": ["Test"],
+                "PLAYER ID": ["Test01"],
+                "POS": ["QB"],
+                "TEAM": ["JAC"],
+                "ADP": [1.0],
+                "POS ADP": [1],
+                "fpts_POS RANK": [1],
+                "jj_POS RANK": [1],
+                "hw_POS RANK": [1],
+                "pff_POS RANK": [1],
+                "ds_POS RANK": [1],
+                "avg_RK": [1.0],
+                "avg_POS RANK": [1.0],
+                "fp_POS RANK": [1],
+                "ECR ADP Delta": [0],
+                "ECR Delta": [0],
+            }
+        )
         ingest_rankings(session, df, 2025, verbose=False)
         assert session.get(Player, "Test01").team == "JAX"

@@ -15,13 +15,13 @@ from nfl_data_py.import_ids().
 """
 
 from datetime import datetime, timezone
+from typing import cast
 
 import numpy as np
 import pandas as pd
 from sqlalchemy.orm import Session
 
-from fantasy_data.models import Player, PlayerSeasonBaseline
-from fantasy_data.standardize import standardize_team
+from fantasy_data.models import PlayerSeasonBaseline
 from fantasy_data.ingest.id_resolver import (
     build_id_map_from_nflverse,
     ensure_player_exists,
@@ -39,33 +39,40 @@ MIN_GAMES = 4
 # Fetching (thin wrappers)
 # ---------------------------------------------------------------------------
 
+
 def _fetch_seasonal(seasons: list[int]) -> pd.DataFrame:
     import nfl_data_py as nfl
+
     return nfl.import_seasonal_data(seasons, "REG")
 
 
 def _fetch_weekly(seasons: list[int]) -> pd.DataFrame:
     import nfl_data_py as nfl
+
     return nfl.import_weekly_data(seasons)
 
 
 def _fetch_snap_counts(seasons: list[int]) -> pd.DataFrame:
     import nfl_data_py as nfl
+
     return nfl.import_snap_counts(seasons)
 
 
 def _fetch_pbp(seasons: list[int]) -> pd.DataFrame:
     import nfl_data_py as nfl
+
     return nfl.import_pbp_data(seasons)
 
 
 def _fetch_ids() -> pd.DataFrame:
     import nfl_data_py as nfl
+
     return nfl.import_ids()
 
 
 def _fetch_ngs_receiving(seasons: list[int]) -> pd.DataFrame:
     import nfl_data_py as nfl
+
     valid = [s for s in seasons if s >= 2016]
     if not valid:
         return pd.DataFrame()
@@ -74,6 +81,7 @@ def _fetch_ngs_receiving(seasons: list[int]) -> pd.DataFrame:
 
 def _fetch_ngs_rushing(seasons: list[int]) -> pd.DataFrame:
     import nfl_data_py as nfl
+
     valid = [s for s in seasons if s >= 2016]
     if not valid:
         return pd.DataFrame()
@@ -111,13 +119,17 @@ def aggregate_ngs_receiving(df: pd.DataFrame) -> pd.DataFrame:
         return out
 
     # Otherwise aggregate weekly to season
-    grouped = season_rows.groupby(["player_gsis_id", "season"]).agg(
-        avg_cushion=("avg_cushion", "mean"),
-        avg_separation=("avg_separation", "mean"),
-        avg_intended_air_yards_ngs=("avg_intended_air_yards", "mean"),
-        avg_yac_above_expectation=("avg_yac_above_expectation", "mean"),
-        avg_expected_yac=("avg_expected_yac", "mean"),
-    ).reset_index()
+    grouped = (
+        season_rows.groupby(["player_gsis_id", "season"])
+        .agg(
+            avg_cushion=("avg_cushion", "mean"),
+            avg_separation=("avg_separation", "mean"),
+            avg_intended_air_yards_ngs=("avg_intended_air_yards", "mean"),
+            avg_yac_above_expectation=("avg_yac_above_expectation", "mean"),
+            avg_expected_yac=("avg_expected_yac", "mean"),
+        )
+        .reset_index()
+    )
     return grouped
 
 
@@ -140,15 +152,20 @@ def aggregate_ngs_rushing(df: pd.DataFrame) -> pd.DataFrame:
         out["rush_yards_over_expected"] = season_rows.get("rush_yards_over_expected_per_att")
         return out
 
-    grouped = season_rows.groupby(["player_gsis_id", "season"]).agg(
-        expected_yards_per_carry=("efficiency", "mean"),
-        rush_yards_over_expected=("rush_yards_over_expected_per_att", "mean"),
-    ).reset_index()
+    grouped = (
+        season_rows.groupby(["player_gsis_id", "season"])
+        .agg(
+            expected_yards_per_carry=("efficiency", "mean"),
+            rush_yards_over_expected=("rush_yards_over_expected_per_att", "mean"),
+        )
+        .reset_index()
+    )
     return grouped
 
 
 def _fetch_ftn(seasons: list[int]) -> pd.DataFrame:
     import nfl_data_py as nfl
+
     valid = [s for s in seasons if s >= 2022]
     if not valid:
         return pd.DataFrame()
@@ -182,9 +199,7 @@ def aggregate_ftn(ftn_df: pd.DataFrame, pbp_df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # Filter to pass plays with a receiver
-    passes = merged[
-        (merged["play_type"] == "pass") & merged["receiver_player_id"].notna()
-    ].copy()
+    passes = merged[(merged["play_type"] == "pass") & merged["receiver_player_id"].notna()].copy()
 
     if passes.empty:
         return pd.DataFrame()
@@ -209,7 +224,7 @@ def aggregate_ftn(ftn_df: pd.DataFrame, pbp_df: pd.DataFrame) -> pd.DataFrame:
         row["created_reception_pct"] = group["is_created_reception"].mean()
 
         # True drop rate = drops / catchable balls
-        catchable = group[group["is_catchable_ball"] == True]
+        catchable = group[group["is_catchable_ball"].eq(True)]
         if len(catchable) > 0:
             row["true_drop_rate"] = catchable["is_drop"].mean()
         else:
@@ -222,6 +237,7 @@ def aggregate_ftn(ftn_df: pd.DataFrame, pbp_df: pd.DataFrame) -> pd.DataFrame:
 
 def _fetch_pfr_receiving(seasons: list[int]) -> pd.DataFrame:
     import nfl_data_py as nfl
+
     valid = [s for s in seasons if s >= 2018]
     if not valid:
         return pd.DataFrame()
@@ -230,6 +246,7 @@ def _fetch_pfr_receiving(seasons: list[int]) -> pd.DataFrame:
 
 def _fetch_pfr_rushing(seasons: list[int]) -> pd.DataFrame:
     import nfl_data_py as nfl
+
     valid = [s for s in seasons if s >= 2018]
     if not valid:
         return pd.DataFrame()
@@ -239,6 +256,7 @@ def _fetch_pfr_rushing(seasons: list[int]) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Aggregation (pure functions, DataFrame in/out)
 # ---------------------------------------------------------------------------
+
 
 def aggregate_seasonal(df: pd.DataFrame) -> pd.DataFrame:
     """Extract fields from nflverse seasonal aggregates.
@@ -280,7 +298,10 @@ def aggregate_weekly(df: pd.DataFrame) -> pd.DataFrame:
     grouped = df.groupby(["player_id", "season"])
 
     results = []
-    for (pid, season), group in grouped:
+    for key, group in grouped:
+        # A 2-column groupby yields a (player_id, season) tuple key; the stubs
+        # only type it as Hashable, so narrow it to the known shape.
+        pid, season = cast("tuple[str, int]", key)
         games = len(group)
         if games < MIN_GAMES:
             continue
@@ -295,16 +316,20 @@ def aggregate_weekly(df: pd.DataFrame) -> pd.DataFrame:
         bust_rate = (fpts < BUST_THRESHOLD).mean()
         consistency = 1 - (std_pts / mean_pts) if mean_pts > 0 else None
 
-        results.append({
-            "player_id": pid,
-            "season": season,
-            "boom_rate": boom_rate,
-            "bust_rate": bust_rate,
-            "consistency_score": consistency,
-        })
+        results.append(
+            {
+                "player_id": pid,
+                "season": season,
+                "boom_rate": boom_rate,
+                "bust_rate": bust_rate,
+                "consistency_score": consistency,
+            }
+        )
 
-    return pd.DataFrame(results) if results else pd.DataFrame(
-        columns=["player_id", "season", "boom_rate", "bust_rate", "consistency_score"]
+    return (
+        pd.DataFrame(results)
+        if results
+        else pd.DataFrame(columns=["player_id", "season", "boom_rate", "bust_rate", "consistency_score"])
     )
 
 
@@ -323,11 +348,15 @@ def aggregate_snaps(df: pd.DataFrame) -> pd.DataFrame:
     if snap_col not in df.columns:
         return pd.DataFrame(columns=["player", "team", "season", "snap_share", "pfr_player_id"])
 
-    grouped = df.groupby(["pfr_player_id", "season"]).agg(
-        snap_share=(snap_col, "mean"),
-        player=("player", "first"),
-        team=("team", "first"),
-    ).reset_index()
+    grouped = (
+        df.groupby(["pfr_player_id", "season"])
+        .agg(
+            snap_share=(snap_col, "mean"),
+            player=("player", "first"),
+            team=("team", "first"),
+        )
+        .reset_index()
+    )
 
     # Normalize to 0-1 if values are percentages
     if grouped["snap_share"].max() > 1.0:
@@ -342,10 +371,7 @@ def aggregate_pbp(df: pd.DataFrame, seasons: list[int]) -> pd.DataFrame:
     This is the most expensive aggregation — processes raw plays.
     """
     # Filter to regular season, real plays
-    df = df[
-        (df["season_type"] == "REG")
-        & (df["play_type"].isin(["pass", "run"]))
-    ].copy()
+    df = df[(df["season_type"] == "REG") & (df["play_type"].isin(["pass", "run"]))].copy()
 
     results = []
     for season in seasons:
@@ -492,6 +518,7 @@ def _aggregate_rusher_pbp(df: pd.DataFrame, team_stats: dict) -> pd.DataFrame:
 # Ingest (writes to DB)
 # ---------------------------------------------------------------------------
 
+
 def ingest_nflverse(
     session: Session,
     seasons: list[int],
@@ -614,7 +641,7 @@ def ingest_nflverse(
 
         # Process PBP in batches
         for batch_start in range(0, len(seasons), 3):
-            batch = seasons[batch_start:batch_start + 3]
+            batch = seasons[batch_start : batch_start + 3]
             if verbose:
                 print(f"  Processing PBP for {batch}...")
             pbp_df = _fetch_pbp(batch)
@@ -654,8 +681,9 @@ def ingest_nflverse(
 
         info = ids_name_map.get(player_id, {})
         player = ensure_player_exists(
-            session, player_id,
-            full_name=info.get("name", "Unknown"),
+            session,
+            player_id,
+            full_name=info.get("name") or "Unknown",
             position=info.get("position"),
             team=info.get("team"),
             gsis_id=str(gsis_id),
@@ -675,9 +703,14 @@ def ingest_nflverse(
             session.add(baseline)
 
         # Set seasonal fields (only if NULL)
-        for field in ["target_share", "air_yards_share", "racr",
-                       "yards_after_catch_per_rec", "avg_depth_of_target",
-                       "dominator_rating"]:
+        for field in [
+            "target_share",
+            "air_yards_share",
+            "racr",
+            "yards_after_catch_per_rec",
+            "avg_depth_of_target",
+            "dominator_rating",
+        ]:
             val = row.get(field)
             if val is not None and not (isinstance(val, float) and np.isnan(val)):
                 if getattr(baseline, field, None) is None:
@@ -826,8 +859,12 @@ def ingest_nflverse(
     # Merge PBP data (keyed by gsis_id)
     if not pbp_agg.empty:
         pbp_fields = [
-            "rz_target_share", "ez_target_share", "third_down_target_share",
-            "rz_carry_share", "goal_line_carry_share", "early_down_share",
+            "rz_target_share",
+            "ez_target_share",
+            "third_down_target_share",
+            "rz_carry_share",
+            "goal_line_carry_share",
+            "early_down_share",
             "third_down_carry_share",
         ]
         for _, row in pbp_agg.iterrows():
@@ -851,8 +888,12 @@ def ingest_nflverse(
     # Merge FTN charting data (keyed by gsis_id)
     if not ftn_agg.empty:
         ftn_fields = [
-            "play_action_target_pct", "screen_target_pct", "contested_ball_pct",
-            "catchable_ball_pct", "created_reception_pct", "true_drop_rate",
+            "play_action_target_pct",
+            "screen_target_pct",
+            "contested_ball_pct",
+            "catchable_ball_pct",
+            "created_reception_pct",
+            "true_drop_rate",
         ]
         for _, row in ftn_agg.iterrows():
             gsis_id = row.get("player_id")
@@ -875,8 +916,10 @@ def ingest_nflverse(
     session.commit()
 
     if verbose:
-        print(f"nflverse ingest: {stats['players_created']} players created, "
-              f"{stats['baselines_updated']} baselines updated, "
-              f"{stats['unmatched']} unmatched")
+        print(
+            f"nflverse ingest: {stats['players_created']} players created, "
+            f"{stats['baselines_updated']} baselines updated, "
+            f"{stats['unmatched']} unmatched"
+        )
 
     return stats

@@ -20,20 +20,22 @@ from fantasy_data.ingest.ingest_nflverse import (
 
 def _make_seasonal_df():
     """Synthetic nflverse seasonal data (import_seasonal_data output)."""
-    return pd.DataFrame({
-        "player_id": ["00-001", "00-002", "00-003"],
-        "season": [2024, 2024, 2024],
-        "tgt_sh": [0.28, 0.15, 0.0],
-        "ay_sh": [0.35, 0.12, 0.0],
-        "racr": [1.05, 0.95, None],
-        "dom": [0.30, 0.15, None],
-        "receptions": [100, 50, 0],
-        "targets": [130, 70, 0],
-        "receiving_yards": [1200, 600, 0],
-        "receiving_air_yards": [1100, 650, 0],
-        "receiving_yards_after_catch": [400, 200, 0],
-        "games": [17, 16, 17],
-    })
+    return pd.DataFrame(
+        {
+            "player_id": ["00-001", "00-002", "00-003"],
+            "season": [2024, 2024, 2024],
+            "tgt_sh": [0.28, 0.15, 0.0],
+            "ay_sh": [0.35, 0.12, 0.0],
+            "racr": [1.05, 0.95, None],
+            "dom": [0.30, 0.15, None],
+            "receptions": [100, 50, 0],
+            "targets": [130, 70, 0],
+            "receiving_yards": [1200, 600, 0],
+            "receiving_air_yards": [1100, 650, 0],
+            "receiving_yards_after_catch": [400, 200, 0],
+            "games": [17, 16, 17],
+        }
+    )
 
 
 def _make_weekly_df():
@@ -41,20 +43,27 @@ def _make_weekly_df():
     rows = []
     # Player 1: consistent high scorer (17 games)
     for week in range(1, 18):
-        rows.append({
-            "player_id": "00-001", "season": 2024, "week": week,
-            "season_type": "REG",
-            "fantasy_points_ppr": 18.0 + (week % 3),  # 18-20 range
-        })
+        rows.append(
+            {
+                "player_id": "00-001",
+                "season": 2024,
+                "week": week,
+                "season_type": "REG",
+                "fantasy_points_ppr": 18.0 + (week % 3),  # 18-20 range
+            }
+        )
     # Player 2: volatile scorer (16 games)
-    scores = [4.0, 25.0, 3.0, 30.0, 5.0, 22.0, 2.0, 28.0,
-              4.5, 24.0, 3.5, 26.0, 5.5, 21.0, 4.0, 27.0]
+    scores = [4.0, 25.0, 3.0, 30.0, 5.0, 22.0, 2.0, 28.0, 4.5, 24.0, 3.5, 26.0, 5.5, 21.0, 4.0, 27.0]
     for i, score in enumerate(scores):
-        rows.append({
-            "player_id": "00-002", "season": 2024, "week": i + 1,
-            "season_type": "REG",
-            "fantasy_points_ppr": score,
-        })
+        rows.append(
+            {
+                "player_id": "00-002",
+                "season": 2024,
+                "week": i + 1,
+                "season_type": "REG",
+                "fantasy_points_ppr": score,
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -62,14 +71,23 @@ def _make_snap_df():
     """Synthetic snap count data."""
     rows = []
     for week in range(1, 18):
-        rows.append({
-            "pfr_player_id": "SmitJo00", "player": "John Smith",
-            "season": 2024, "week": week, "team": "KC",
-            "game_type": "REG", "game_id": f"2024_W{week}",
-            "offense_pct": 85.0 + (week % 5),  # 85-89%
-            "offense_snaps": 60, "defense_snaps": 0, "defense_pct": 0,
-            "st_snaps": 5, "st_pct": 10,
-        })
+        rows.append(
+            {
+                "pfr_player_id": "SmitJo00",
+                "player": "John Smith",
+                "season": 2024,
+                "week": week,
+                "team": "KC",
+                "game_type": "REG",
+                "game_id": f"2024_W{week}",
+                "offense_pct": 85.0 + (week % 5),  # 85-89%
+                "offense_snaps": 60,
+                "defense_snaps": 0,
+                "defense_pct": 0,
+                "st_snaps": 5,
+                "st_pct": 10,
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -80,24 +98,34 @@ def _make_pbp_df():
     for i in range(100):
         yardline = 50 - (i % 50)  # Varies 1-50
         down = (i % 4) + 1
-        plays.append({
-            "season": 2024, "season_type": "REG",
-            "play_type": "pass", "posteam": "KC",
-            "receiver_player_id": "00-001" if i < 60 else "00-002",
-            "rusher_player_id": None,
-            "yardline_100": yardline, "down": down,
-        })
+        plays.append(
+            {
+                "season": 2024,
+                "season_type": "REG",
+                "play_type": "pass",
+                "posteam": "KC",
+                "receiver_player_id": "00-001" if i < 60 else "00-002",
+                "rusher_player_id": None,
+                "yardline_100": yardline,
+                "down": down,
+            }
+        )
     # 80 run plays for team KC
     for i in range(80):
         yardline = 40 - (i % 40)
         down = (i % 4) + 1
-        plays.append({
-            "season": 2024, "season_type": "REG",
-            "play_type": "run", "posteam": "KC",
-            "receiver_player_id": None,
-            "rusher_player_id": "00-003" if i < 50 else "00-004",
-            "yardline_100": yardline, "down": down,
-        })
+        plays.append(
+            {
+                "season": 2024,
+                "season_type": "REG",
+                "play_type": "run",
+                "posteam": "KC",
+                "receiver_player_id": None,
+                "rusher_player_id": "00-003" if i < 50 else "00-004",
+                "yardline_100": yardline,
+                "down": down,
+            }
+        )
     return pd.DataFrame(plays)
 
 
@@ -146,9 +174,11 @@ class TestAggregateWeekly:
         result = aggregate_weekly(df)
         p2 = result[result["player_id"] == "00-002"].iloc[0]
         # Player 2: scores below 5 multiple times
-        bust_count = sum(1 for s in [4.0, 25.0, 3.0, 30.0, 5.0, 22.0, 2.0, 28.0,
-                                      4.5, 24.0, 3.5, 26.0, 5.5, 21.0, 4.0, 27.0]
-                        if s < BUST_THRESHOLD)
+        bust_count = sum(
+            1
+            for s in [4.0, 25.0, 3.0, 30.0, 5.0, 22.0, 2.0, 28.0, 4.5, 24.0, 3.5, 26.0, 5.5, 21.0, 4.0, 27.0]
+            if s < BUST_THRESHOLD
+        )
         assert p2["bust_rate"] == pytest.approx(bust_count / 16)
 
     def test_consistency_score(self):
@@ -165,10 +195,17 @@ class TestAggregateWeekly:
     def test_filters_regular_season(self):
         df = _make_weekly_df()
         # Add a playoff game
-        playoff = pd.DataFrame([{
-            "player_id": "00-001", "season": 2024, "week": 19,
-            "season_type": "POST", "fantasy_points_ppr": 50.0,
-        }])
+        playoff = pd.DataFrame(
+            [
+                {
+                    "player_id": "00-001",
+                    "season": 2024,
+                    "week": 19,
+                    "season_type": "POST",
+                    "fantasy_points_ppr": 50.0,
+                }
+            ]
+        )
         df = pd.concat([df, playoff], ignore_index=True)
         result = aggregate_weekly(df)
         p1 = result[result["player_id"] == "00-001"].iloc[0]
@@ -219,8 +256,17 @@ class TestAggregatePbp:
                 assert 0.0 <= gl_share <= 1.0
 
     def test_empty_pbp_returns_empty(self):
-        df = pd.DataFrame(columns=["season", "season_type", "play_type", "posteam",
-                                    "receiver_player_id", "rusher_player_id",
-                                    "yardline_100", "down"])
+        df = pd.DataFrame(
+            columns=[
+                "season",
+                "season_type",
+                "play_type",
+                "posteam",
+                "receiver_player_id",
+                "rusher_player_id",
+                "yardline_100",
+                "down",
+            ]
+        )
         result = aggregate_pbp(df, [2024])
         assert result.empty

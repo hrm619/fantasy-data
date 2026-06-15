@@ -19,28 +19,29 @@ def plot_player_source_breakdown(data: dict) -> go.Figure:
     source_names = list(sources.keys())
     source_ranks = list(sources.values())
 
-    colors = [
-        hl_color if name in SHARP_SOURCES else bg_color
-        for name in source_names
-    ]
+    colors = [hl_color if name in SHARP_SOURCES else bg_color for name in source_names]
 
     fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=source_ranks,
-        y=source_names,
-        orientation="h",
-        marker_color=colors,
-        text=[str(r) if r is not None else "" for r in source_ranks],
-        textposition="outside",
-        textfont=dict(size=10, color=COLORS["text_secondary"]),
-        hovertemplate="%{y}: %{x}<extra></extra>",
-    ))
+    fig.add_trace(
+        go.Bar(
+            x=source_ranks,
+            y=source_names,
+            orientation="h",
+            marker_color=colors,
+            text=[str(r) if r is not None else "" for r in source_ranks],
+            textposition="outside",
+            textfont=dict(size=10, color=COLORS["text_secondary"]),
+            hovertemplate="%{y}: %{x}<extra></extra>",
+        )
+    )
 
     diverging = color_for_mode("diverging")
     if data["adp_positional"]:
         fig.add_vline(
             x=data["adp_positional"],
-            line_dash="solid", line_color=diverging[0], line_width=1.5,
+            line_dash="solid",
+            line_color=diverging[0],
+            line_width=1.5,
             annotation_text=f"ADP: {data['position']}{data['adp_positional']}",
             annotation_position="top right",
             annotation_font=dict(size=10, color=diverging[0]),
@@ -49,7 +50,9 @@ def plot_player_source_breakdown(data: dict) -> go.Figure:
     if data["sharp_consensus"]:
         fig.add_vline(
             x=data["sharp_consensus"],
-            line_dash="dash", line_color=diverging[2], line_width=1.5,
+            line_dash="dash",
+            line_color=diverging[2],
+            line_width=1.5,
             annotation_text=f"Sharp: {data['position']}{round(data['sharp_consensus'], 1)}",
             annotation_position="top left",
             annotation_font=dict(size=10, color=diverging[2]),

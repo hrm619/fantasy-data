@@ -5,6 +5,7 @@ computes format-neutral sharp consensus using position-first ranking
 with ADP scarcity curve conversion, and creates Player records directly.
 """
 
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 import numpy as np
@@ -35,13 +36,17 @@ COLUMN_MAP = {
 
 # Sharp source positional rank columns in the pipeline output
 SHARP_POS_COLUMNS = [
-    "fpts_POS RANK", "jj_POS RANK", "hw_POS RANK", "pff_POS RANK", "ds_POS RANK",
+    "fpts_POS RANK",
+    "jj_POS RANK",
+    "hw_POS RANK",
+    "pff_POS RANK",
+    "ds_POS RANK",
 ]
 
 DIVERGENCE_THRESHOLD = 12
 
 
-def _build_scarcity_curves(df: pd.DataFrame) -> dict[str, callable]:
+def _build_scarcity_curves(df: pd.DataFrame) -> dict[str, Callable[[float], float]]:
     """Build ADP scarcity curves — map positional rank to ADP overall.
 
     For each position, creates an interpolation function that converts
@@ -63,6 +68,7 @@ def _build_scarcity_curves(df: pd.DataFrame) -> dict[str, callable]:
         def make_interp(x_vals, y_vals):
             def interp(pos_rank):
                 return float(np.interp(pos_rank, x_vals, y_vals))
+
             return interp
 
         curves[pos] = make_interp(x, y)
@@ -111,9 +117,11 @@ def compute_sharp_consensus(df: pd.DataFrame) -> pd.DataFrame:
 
     # Positional divergence (cleaner signal — fully format-neutral)
     df["adp_divergence_pos"] = df.apply(
-        lambda r: r["POS ADP"] - r["sharp_pos_rank"]
-        if pd.notna(r.get("POS ADP")) and pd.notna(r.get("sharp_pos_rank"))
-        else None,
+        lambda r: (
+            r["POS ADP"] - r["sharp_pos_rank"]
+            if pd.notna(r.get("POS ADP")) and pd.notna(r.get("sharp_pos_rank"))
+            else None
+        ),
         axis=1,
     )
 
@@ -221,11 +229,90 @@ def ingest_rankings(
     session.commit()
 
     if verbose:
-        print(f"Rankings ingest: {stats['created']} players created, "
-              f"{stats['existing']} existing, {stats['skipped']} skipped, "
-              f"{stats['updated']} baselines updated")
+        print(
+            f"Rankings ingest: {stats['created']} players created, "
+            f"{stats['existing']} existing, {stats['skipped']} skipped, "
+            f"{stats['updated']} baselines updated"
+        )
 
     return stats
+
+
+def refresh_sources(
+    update_dir: str | None = None,
+    season: int | None = None,
+    auto_login: bool = False,
+    verbose: bool = True,
+) -> dict[str, list[str]]:
+    """Fetch every automated redraft source into the pipeline's update folder.
+
+    Mirrors the pipeline's `ff-rankings refresh-all` workflow: runs the six
+    automated fetchers independently so one failure (e.g. an expired paywalled
+    session) is reported but does not stop the others. Hayden Winks (hw) has no
+    automated fetcher (no stable Underdog URL) and must be downloaded manually
+    into update/ — its absence is surfaced, not fetched.
+
+    Returns {"fetched": [labels], "failed": [labels]} so the caller can decide
+    whether to proceed to consolidation.
+    """
+    import os
+
+    from fantasy_pipeline.config import CURRENT_SEASON, DEFAULT_PATHS
+    from fantasy_pipeline.scraper.fetch_rankings import (
+        ensure_session,
+        fetch_draftsharks,
+        fetch_fantasypros_adp,
+        fetch_fantasypros_rankings,
+        fetch_fpts,
+        fetch_jj,
+        fetch_pff,
+    )
+
+    update_dir = update_dir or DEFAULT_PATHS["update_dir"]
+    year = season or CURRENT_SEASON
+    os.makedirs(update_dir, exist_ok=True)
+
+    # (label, paywalled-session-key | None, thunk). Free sources have no session key.
+    fetchers = [
+        ("adp (FantasyPros ADP)", None, lambda: fetch_fantasypros_adp(update_dir, year=year)),
+        ("fp (FantasyPros rankings)", None, lambda: fetch_fantasypros_rankings(update_dir, year=year)),
+        ("ds (DraftSharks)", None, lambda: fetch_draftsharks(update_dir)),
+        ("pff (PFF)", "pff", lambda: fetch_pff(update_dir, year=year)),
+        ("fpts (FantasyPoints)", "fpts", lambda: fetch_fpts(update_dir, year=year)),
+        ("jj (JJ Zachariason)", "jj", lambda: fetch_jj(update_dir, year=year)),
+    ]
+
+    if verbose:
+        print(f"Refreshing {len(fetchers)} redraft sources into: {update_dir}")
+
+    fetched: list[str] = []
+    failed: list[str] = []
+    for label, source, thunk in fetchers:
+        if source and auto_login and not ensure_session(source):
+            failed.append(label)
+            if verbose:
+                print(f"   ✗ {label} — session invalid; login not completed")
+            continue
+        try:
+            thunk()
+            fetched.append(label)
+            if verbose:
+                print(f"   ✓ {label}")
+        except Exception as e:
+            failed.append(label)
+            if verbose:
+                detail = str(e).splitlines()[0] if str(e) else type(e).__name__
+                print(f"   ✗ {label} — {detail}")
+
+    if verbose:
+        print(f"Fetched {len(fetched)}/{len(fetchers)} sources.")
+        if not any(f.startswith("tableDownload") for f in os.listdir(update_dir)):
+            print(
+                "   Note: redraft also needs Hayden Winks (tableDownload.csv), which has "
+                "no automated fetcher — download it manually into update/ for full consensus."
+            )
+
+    return {"fetched": fetched, "failed": failed}
 
 
 def run_rankings_pipeline(
@@ -234,24 +321,35 @@ def run_rankings_pipeline(
     league_type: str = "redraft",
     data_path: str | None = None,
     verbose: bool = True,
+    refresh: bool = False,
+    auto_login: bool = False,
 ) -> dict[str, int]:
-    """Run the full rankings pipeline: process + ingest."""
+    """Run the full rankings pipeline: (optionally fetch) + process + ingest.
+
+    When ``refresh`` is set, the automated source fetchers are run first to
+    populate the pipeline's update folder (the `ff-rankings refresh-all`
+    workflow), so the consolidation reflects freshly fetched rankings. Fetch
+    failures are reported but do not abort consolidation — it runs on whatever
+    sources landed. ``auto_login`` re-auths expired paywalled sessions.
+    """
     from fantasy_pipeline import RankingsProcessor
 
     if verbose:
         print(f"Running rankings pipeline: {league_type} season {season}")
 
-    proc = RankingsProcessor(league_type)
-    kwargs = {"return_dataframe": True, "verbose": verbose}
-    if data_path:
-        kwargs["data_path"] = data_path
+    if refresh:
+        refresh_sources(update_dir=data_path, season=season, auto_login=auto_login, verbose=verbose)
 
-    df = proc.process_rankings(**kwargs)
+    proc = RankingsProcessor(league_type)
+    df = proc.process_rankings(
+        data_path=data_path,
+        verbose=verbose,
+        return_dataframe=True,
+    )
 
     if not isinstance(df, pd.DataFrame):
         raise RuntimeError(
-            f"Expected DataFrame from process_rankings, got {type(df)}. "
-            "Ensure fantasy-pipeline is up to date."
+            f"Expected DataFrame from process_rankings, got {type(df)}. Ensure fantasy-pipeline is up to date."
         )
 
     return ingest_rankings(session, df, season, league_type, verbose)

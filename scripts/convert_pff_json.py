@@ -43,28 +43,30 @@ def _load_grades(input_path: Path) -> tuple[pd.DataFrame, int | None]:
 
         for p in data.get("players", []):
             draft = p.get("draft") or {}
-            all_players.append({
-                "player_id": str(p.get("id", "")),
-                "player": p.get("name", ""),
-                "position": p.get("position") or p.get("grade_position", ""),
-                "team_abbr": p.get("team_name", ""),
-                "offense_grade": p.get("offense"),
-                "receiving_grade": p.get("receiving"),
-                "run_block_grade": p.get("run_block"),
-                "pass_block_grade": p.get("pass_block"),
-                "rushing_grade": p.get("run"),
-                "passing_grade": p.get("pass"),
-                "offense_rank": p.get("offense_rank"),
-                "offense_snaps": p.get("offense_snaps"),
-                "jersey_number": p.get("jersey_number"),
-                "age": p.get("age"),
-                "height": _decode_height(p.get("height")),
-                "weight": p.get("weight"),
-                "college": p.get("college"),
-                "draft_year": draft.get("season"),
-                "draft_round": draft.get("round"),
-                "draft_pick": draft.get("selection"),
-            })
+            all_players.append(
+                {
+                    "player_id": str(p.get("id", "")),
+                    "player": p.get("name", ""),
+                    "position": p.get("position") or p.get("grade_position", ""),
+                    "team_abbr": p.get("team_name", ""),
+                    "offense_grade": p.get("offense"),
+                    "receiving_grade": p.get("receiving"),
+                    "run_block_grade": p.get("run_block"),
+                    "pass_block_grade": p.get("pass_block"),
+                    "rushing_grade": p.get("run"),
+                    "passing_grade": p.get("pass"),
+                    "offense_rank": p.get("offense_rank"),
+                    "offense_snaps": p.get("offense_snaps"),
+                    "jersey_number": p.get("jersey_number"),
+                    "age": p.get("age"),
+                    "height": _decode_height(p.get("height")),
+                    "weight": p.get("weight"),
+                    "college": p.get("college"),
+                    "draft_year": draft.get("season"),
+                    "draft_round": draft.get("round"),
+                    "draft_pick": draft.get("selection"),
+                }
+            )
 
     return pd.DataFrame(all_players), detected_season
 
@@ -73,7 +75,7 @@ def _extract_stats(data: list[dict], field_map: dict[str, str]) -> pd.DataFrame:
     """Extract specific fields from a PFF stats list, renaming to our schema."""
     rows = []
     for p in data:
-        row = {"player_id": str(p.get("player_id", ""))}
+        row: dict[str, object] = {"player_id": str(p.get("player_id", ""))}
         for src_key, dst_key in field_map.items():
             row[dst_key] = p.get(src_key)
         rows.append(row)
@@ -89,23 +91,26 @@ def _load_stats(input_path: Path) -> pd.DataFrame:
     if rec_path.exists():
         with open(rec_path) as f:
             data = json.load(f)
-        df = _extract_stats(data.get("receiving_summary", []), {
-            "player_game_count": "games",
-            "grades_pass_route": "route_grade",
-            "drop_rate": "drop_rate",
-            "contested_catch_rate": "contested_catch_rate",
-            "avg_depth_of_target": "avg_depth_of_target",
-            "yprr": "yards_per_route_run",
-            "route_rate": "route_participation_rate",
-            "caught_percent": "catch_rate_pff",
-            "yards_after_catch_per_reception": "yac_per_rec",
-            "targeted_qb_rating": "targeted_qb_rating",
-            "slot_rate": "slot_rate",
-            "wide_rate": "wide_rate",
-            "inline_rate": "inline_rate",
-            "avoided_tackles": "avoided_tackles_rec",
-            "routes": "routes_run",
-        })
+        df = _extract_stats(
+            data.get("receiving_summary", []),
+            {
+                "player_game_count": "games",
+                "grades_pass_route": "route_grade",
+                "drop_rate": "drop_rate",
+                "contested_catch_rate": "contested_catch_rate",
+                "avg_depth_of_target": "avg_depth_of_target",
+                "yprr": "yards_per_route_run",
+                "route_rate": "route_participation_rate",
+                "caught_percent": "catch_rate_pff",
+                "yards_after_catch_per_reception": "yac_per_rec",
+                "targeted_qb_rating": "targeted_qb_rating",
+                "slot_rate": "slot_rate",
+                "wide_rate": "wide_rate",
+                "inline_rate": "inline_rate",
+                "avoided_tackles": "avoided_tackles_rec",
+                "routes": "routes_run",
+            },
+        )
         frames.append(df)
 
     # Rushing stats
@@ -113,13 +118,16 @@ def _load_stats(input_path: Path) -> pd.DataFrame:
     if rush_path.exists():
         with open(rush_path) as f:
             data = json.load(f)
-        df = _extract_stats(data.get("rushing_summary", []), {
-            "player_game_count": "games_rush",
-            "elusive_rating": "elusive_rating",
-            "yco_attempt": "yards_after_contact_per_att",
-            "breakaway_percent": "breakaway_pct",
-            "avoided_tackles": "avoided_tackles_rush",
-        })
+        df = _extract_stats(
+            data.get("rushing_summary", []),
+            {
+                "player_game_count": "games_rush",
+                "elusive_rating": "elusive_rating",
+                "yco_attempt": "yards_after_contact_per_att",
+                "breakaway_percent": "breakaway_pct",
+                "avoided_tackles": "avoided_tackles_rush",
+            },
+        )
         frames.append(df)
 
     # Passing stats
@@ -127,15 +135,18 @@ def _load_stats(input_path: Path) -> pd.DataFrame:
     if pass_path.exists():
         with open(pass_path) as f:
             data = json.load(f)
-        df = _extract_stats(data.get("passing_summary", []), {
-            "player_game_count": "games_pass",
-            "accuracy_percent": "accuracy_pct",
-            "btt_rate": "big_time_throw_rate",
-            "twp_rate": "turnover_worthy_play_rate",
-            "avg_time_to_throw": "avg_time_to_throw",
-            "avg_depth_of_target": "adot_pass",
-            "completion_percent": "completion_pct",
-        })
+        df = _extract_stats(
+            data.get("passing_summary", []),
+            {
+                "player_game_count": "games_pass",
+                "accuracy_percent": "accuracy_pct",
+                "btt_rate": "big_time_throw_rate",
+                "twp_rate": "turnover_worthy_play_rate",
+                "avg_time_to_throw": "avg_time_to_throw",
+                "avg_depth_of_target": "adot_pass",
+                "completion_percent": "completion_pct",
+            },
+        )
         frames.append(df)
 
     if not frames:
@@ -177,8 +188,14 @@ def convert_pff_json(input_dir: str, output: str, season: int | None = None):
     print(f"  Positions: {merged['position'].value_counts().to_dict()}")
 
     # Key field coverage
-    for field in ["route_grade", "drop_rate", "contested_catch_rate",
-                   "yards_per_route_run", "games", "avg_depth_of_target"]:
+    for field in [
+        "route_grade",
+        "drop_rate",
+        "contested_catch_rate",
+        "yards_per_route_run",
+        "games",
+        "avg_depth_of_target",
+    ]:
         if field in merged.columns:
             count = merged[field].notna().sum()
             print(f"  {field}: {count} players")

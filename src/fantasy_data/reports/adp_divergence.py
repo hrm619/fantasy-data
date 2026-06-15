@@ -30,9 +30,7 @@ def get_adp_divergence(
         query = query.filter(Player.position == position.upper())
 
     if threshold:
-        query = query.filter(
-            PlayerSeasonBaseline.adp_divergence_flag == 1
-        )
+        query = query.filter(PlayerSeasonBaseline.adp_divergence_flag == 1)
 
     rows = query.all()
 
@@ -40,16 +38,18 @@ def get_adp_divergence(
     for player, baseline in rows:
         div_pos = baseline.adp_divergence_pos
         direction = "UNDER" if div_pos and div_pos > 0 else "OVER"
-        results.append({
-            "player": player.full_name,
-            "pos": player.position,
-            "team": player.team,
-            "adp_rank": baseline.adp_positional_rank,
-            "sharp_rank": round(baseline.sharp_pos_rank, 1) if baseline.sharp_pos_rank else None,
-            "divergence": round(div_pos) if div_pos else None,
-            "direction": direction,
-            "sources": baseline.rankings_source_count,
-        })
+        results.append(
+            {
+                "player": player.full_name,
+                "pos": player.position,
+                "team": player.team,
+                "adp_rank": baseline.adp_positional_rank,
+                "sharp_rank": round(baseline.sharp_pos_rank, 1) if baseline.sharp_pos_rank else None,
+                "divergence": round(div_pos) if div_pos else None,
+                "direction": direction,
+                "sources": baseline.rankings_source_count,
+            }
+        )
 
     results.sort(key=lambda x: abs(x["divergence"] or 0), reverse=True)
     return results[:limit]
@@ -68,13 +68,21 @@ def print_adp_divergence(
         print(f"No ADP divergences >= {threshold} positions found.")
         return
 
-    headers = ["Player", "Pos", "Team", "ADP Rank", "Sharp Rank",
-               "Divergence", "Direction", "Sources"]
-    rows = [[r["player"], r["pos"], r["team"], r["adp_rank"],
-             r["sharp_rank"], r["divergence"], r["direction"],
-             r["sources"]] for r in results]
+    headers = ["Player", "Pos", "Team", "ADP Rank", "Sharp Rank", "Divergence", "Direction", "Sources"]
+    rows = [
+        [
+            r["player"],
+            r["pos"],
+            r["team"],
+            r["adp_rank"],
+            r["sharp_rank"],
+            r["divergence"],
+            r["direction"],
+            r["sources"],
+        ]
+        for r in results
+    ]
 
-    print(f"\nADP Divergence Report — {season} season "
-          f"(threshold: {threshold}+ positions)")
+    print(f"\nADP Divergence Report — {season} season (threshold: {threshold}+ positions)")
     print(tabulate(rows, headers=headers, tablefmt="simple"))
     print(f"\n{len(results)} players with significant divergence")

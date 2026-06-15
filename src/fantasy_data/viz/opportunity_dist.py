@@ -95,37 +95,40 @@ def plot_sharp_vs_adp_scatter(df, season: int) -> go.Figure:
         subset = df[df["position"] == pos]
         if subset.empty:
             continue
-        fig.add_trace(go.Scatter(
-            x=subset["adp_positional_rank"],
-            y=subset["sharp_consensus_rank"],
-            mode="markers",
-            name=pos,
-            marker=dict(
-                color=pos_colors[pos],
-                size=8,
-                opacity=0.75,
-                line=dict(width=0.5, color="white"),
-            ),
-            hovertemplate=(
-                "<b>%{text}</b><br>"
-                "ADP Rank: %{x}<br>"
-                "Sharp Rank: %{y}<extra></extra>"
-            ),
-            text=subset["full_name"] if "full_name" in subset.columns else None,
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=subset["adp_positional_rank"],
+                y=subset["sharp_consensus_rank"],
+                mode="markers",
+                name=pos,
+                marker=dict(
+                    color=pos_colors[pos],
+                    size=8,
+                    opacity=0.75,
+                    line=dict(width=0.5, color="white"),
+                ),
+                hovertemplate=("<b>%{text}</b><br>ADP Rank: %{x}<br>Sharp Rank: %{y}<extra></extra>"),
+                text=subset["full_name"] if "full_name" in subset.columns else None,
+            )
+        )
 
-    max_val = max(
-        df["adp_positional_rank"].max(),
-        df["sharp_consensus_rank"].max(),
-    ) + 2
-    fig.add_trace(go.Scatter(
-        x=[0, max_val],
-        y=[0, max_val],
-        mode="lines",
-        line=dict(color=COLORS["spine"], width=1, dash="dash"),
-        showlegend=False,
-        hoverinfo="skip",
-    ))
+    max_val = (
+        max(
+            df["adp_positional_rank"].max(),
+            df["sharp_consensus_rank"].max(),
+        )
+        + 2
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=[0, max_val],
+            y=[0, max_val],
+            mode="lines",
+            line=dict(color=COLORS["spine"], width=1, dash="dash"),
+            showlegend=False,
+            hoverinfo="skip",
+        )
+    )
 
     fig.update_layout(
         xaxis=dict(autorange="reversed"),

@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out fantasy_data_pipeline (editable sibling dependency)
+        # fantasy-data depends on fantasy_data_pipeline via an editable local path
+        # (`../fantasy_data_pipeline` in pyproject). Clone it one level up from this
+        # repo so that relative path resolves. Keeping fantasy-data at the workspace
+        # root means uv's venv and ty's environment discovery stay consistent.
+        run: git clone --depth 1 https://github.com/hrm619/fantasy_data_pipeline.git ../fantasy_data_pipeline
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package with dev + viz dependencies
+        # setup-uv already provisions the Python + virtual environment.
+        # The viz extra (plotly/scipy/kaleido) is included so tests/test_viz.py runs.
+        run: uv pip install -e ".[dev,viz]"
+
+      - name: Lint (ruff)
+        run: uv run ruff check src/ scripts/ tests/
+
+      - name: Format check (ruff format)
+        run: uv run ruff format --check src/ scripts/ tests/
+
+      - name: Type check (ty)
+        run: uv run ty check src/ scripts/ tests/
+
+      - name: Test (pytest)
+        run: uv run pytest

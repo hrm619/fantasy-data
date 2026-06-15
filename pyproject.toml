@@ -33,7 +33,8 @@ dev = [
     "ruff>=0.1.0",
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
-    "mypy>=1.0.0",
+    "ty>=0.0.49,<0.1",  # pre-1.0: pin to a compatible range so a stricter release can't break CI unexpectedly
+    "pre-commit>=3.0.0",
 ]
 viz = [
     "plotly>=5.18.0",
@@ -46,3 +47,20 @@ fantasy-data = "fantasy_data.cli:cli"
 
 [project.urls]
 Repository = "https://github.com/henrymarsh/fantasy-data"
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+# Pyflakes (F) plus the pycodestyle subset ruff enables by default.
+# E501 (line-too-long) is intentionally omitted — several data/regex lines are long by design.
+select = ["E4", "E7", "E9", "F"]
+
+# Formatting handled by `ruff format` (black-compatible drop-in). line-length is
+# inherited from [tool.ruff] above, so no separate formatter config is needed.
+
+[tool.ty]
+# Astral's type checker (Rust), replacing mypy. Run with `uv run ty check src/ scripts/ tests/`.
+# All three dirs are clean and gated in CI — ORM models use SQLAlchemy 2.0 Mapped[]
+# typing so attribute assignments type-check. Keep `ty check` green when adding code.

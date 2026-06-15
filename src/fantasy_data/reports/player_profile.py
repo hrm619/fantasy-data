@@ -4,7 +4,10 @@ from sqlalchemy.orm import Session
 from tabulate import tabulate
 
 from fantasy_data.models import (
-    Player, PlayerSeasonBaseline, TargetCompetition, QualitativeSignal,
+    Player,
+    PlayerSeasonBaseline,
+    TargetCompetition,
+    QualitativeSignal,
 )
 
 
@@ -64,8 +67,9 @@ def print_player_profile(
 
     print(f"\n{'=' * 60}")
     print(f"  {p.full_name} ({p.position}, {p.team})")
-    print(f"  Age: {p.age}  |  Years Pro: {p.years_pro}  |  "
-          f"Draft: Rd {p.draft_round or '—'}, Pick {p.draft_pick or '—'}")
+    print(
+        f"  Age: {p.age}  |  Years Pro: {p.years_pro}  |  Draft: Rd {p.draft_round or '—'}, Pick {p.draft_pick or '—'}"
+    )
     print(f"{'=' * 60}")
 
     if not b:
@@ -74,16 +78,17 @@ def print_player_profile(
 
     # Trust & Context
     print(f"\n  Trust Weight: {b.data_trust_weight or '—'}")
-    print(f"  HC Continuity: {'Yes' if b.hc_continuity else 'No'}  |  "
-          f"OC Continuity: {'Yes' if b.oc_continuity else 'No'}  |  "
-          f"Seasons in System: {b.seasons_in_system or '—'}")
+    print(
+        f"  HC Continuity: {'Yes' if b.hc_continuity else 'No'}  |  "
+        f"OC Continuity: {'Yes' if b.oc_continuity else 'No'}  |  "
+        f"Seasons in System: {b.seasons_in_system or '—'}"
+    )
     if b.projection_uncertain_flag:
         print("  ⚠ PROJECTION UNCERTAIN — insufficient trusted historical data")
 
     # Role Signals
-    if any(getattr(b, f, None) is not None for f in
-           ["snap_share", "target_share", "air_yards_share", "wopr"]):
-        print(f"\n  --- Role Signals ---")
+    if any(getattr(b, f, None) is not None for f in ["snap_share", "target_share", "air_yards_share", "wopr"]):
+        print("\n  --- Role Signals ---")
         rows = []
         for label, field in [
             ("Snap Share", "snap_share"),
@@ -100,7 +105,7 @@ def print_player_profile(
         print(tabulate(rows, tablefmt="plain"))
 
     # Market Position
-    print(f"\n  --- Market Position ---")
+    print("\n  --- Market Position ---")
     market_rows = [
         ["ADP Consensus", b.adp_consensus],
         ["ADP Positional Rank", b.adp_positional_rank],
@@ -116,16 +121,16 @@ def print_player_profile(
         print(f"\n  --- Target Competition ({len(comps)} competitors) ---")
         comp_rows = []
         for c in sorted(comps, key=lambda x: x.route_overlap_score or 0, reverse=True):
-            comp_rows.append([
-                c.competitor_name,
-                c.competitor_position,
-                c.competitor_route_type or "—",
-                f"{c.route_overlap_score:.2f}" if c.route_overlap_score else "—",
-                c.competition_type,
-            ])
-        print(tabulate(comp_rows,
-                       headers=["Competitor", "Pos", "Route", "Overlap", "Type"],
-                       tablefmt="simple"))
+            comp_rows.append(
+                [
+                    c.competitor_name,
+                    c.competitor_position,
+                    c.competitor_route_type or "—",
+                    f"{c.route_overlap_score:.2f}" if c.route_overlap_score else "—",
+                    c.competition_type,
+                ]
+            )
+        print(tabulate(comp_rows, headers=["Competitor", "Pos", "Route", "Overlap", "Type"], tablefmt="simple"))
 
     # Qualitative Signals
     sigs = data["signals"]
@@ -134,8 +139,7 @@ def print_player_profile(
         for s in sigs:
             direction = s.signal_direction or "?"
             conf = f"{s.confidence_score:.1f}" if s.confidence_score else "?"
-            print(f"  [{direction}] {s.signal_type} (conf: {conf}) — "
-                  f"{s.source_name or '?'}")
+            print(f"  [{direction}] {s.signal_type} (conf: {conf}) — {s.source_name or '?'}")
             print(f"    {s.signal_summary}")
 
     print()

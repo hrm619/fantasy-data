@@ -39,23 +39,27 @@ def plot_rankings_variance(
         pos_results = [(i, r) for i, r in enumerate(results) if r["pos"] == pos]
         if not pos_results:
             continue
-        fig.add_trace(go.Scatter(
-            x=[r["avg_rank"] for _, r in pos_results],
-            y=[r["std_dev"] for _, r in pos_results],
-            mode="markers",
-            name=pos,
-            marker=dict(
-                color=color,
-                size=10,
-                opacity=0.75,
-                line=dict(width=0.5, color="white"),
-            ),
-            hovertemplate="%{customdata}<extra></extra>",
-            customdata=[hover[i] for i, _ in pos_results],
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=[r["avg_rank"] for _, r in pos_results],
+                y=[r["std_dev"] for _, r in pos_results],
+                mode="markers",
+                name=pos,
+                marker=dict(
+                    color=color,
+                    size=10,
+                    opacity=0.75,
+                    line=dict(width=0.5, color="white"),
+                ),
+                hovertemplate="%{customdata}<extra></extra>",
+                customdata=[hover[i] for i, _ in pos_results],
+            )
+        )
 
     fig.add_hline(
-        y=8.0, line_dash="dot", line_color=COLORS["spine"],
+        y=8.0,
+        line_dash="dot",
+        line_color=COLORS["spine"],
         annotation_text="contested threshold",
         annotation_position="right",
         annotation_font=dict(size=10, color=COLORS["text_tertiary"]),
@@ -69,7 +73,7 @@ def plot_rankings_variance(
 
     apply_theme(
         fig,
-        title=f"Which Players Do Sharp Sources Disagree On Most?",
+        title="Which Players Do Sharp Sources Disagree On Most?",
         subtitle=f"{season} season — higher std dev = more contested evaluation",
     )
     format_axis(fig, "x", "Average Positional Rank (lower = better)")

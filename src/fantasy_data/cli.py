@@ -68,18 +68,38 @@ def ingest_group():
 
 
 @ingest_group.command("rankings")
-@click.option("--league-type", default="redraft",
-              type=click.Choice(["redraft", "bestball"]),
-              help="Rankings league type.")
+@click.option(
+    "--league-type", default="redraft", type=click.Choice(["redraft", "bestball"]), help="Rankings league type."
+)
 @click.option("--season", required=True, type=int, help="NFL season year.")
 @click.option("--data-path", default=None, help="Path to rankings data directory.")
-def cmd_ingest_rankings(league_type, season, data_path):
-    """Run rankings pipeline and ingest into player_season_baseline."""
+@click.option(
+    "--refresh", is_flag=True, default=False, help="Fetch all automated sources (refresh-all) before consolidating."
+)
+@click.option(
+    "--auto-login",
+    is_flag=True,
+    default=False,
+    help="With --refresh, re-auth expired paywalled sessions (pops a login window).",
+)
+def cmd_ingest_rankings(league_type, season, data_path, refresh, auto_login):
+    """Run rankings pipeline and ingest into player_season_baseline.
+
+    With --refresh, the automated source fetchers run first to populate the
+    pipeline's update folder, so consolidation reflects freshly fetched rankings.
+    """
     from fantasy_data.ingest.ingest_rankings import run_rankings_pipeline
 
     session = get_session()
     try:
-        stats = run_rankings_pipeline(session, season, league_type, data_path)
+        stats = run_rankings_pipeline(
+            session,
+            season,
+            league_type,
+            data_path,
+            refresh=refresh,
+            auto_login=auto_login,
+        )
         click.echo(f"Done: {stats}")
     finally:
         session.close()
@@ -102,8 +122,7 @@ def cmd_ingest_pff(file_path, season):
 
 
 @ingest_group.command("historical")
-@click.option("--file", "file_path", default=None,
-              help="Path to combined_data.csv (defaults to pipeline's data dir).")
+@click.option("--file", "file_path", default=None, help="Path to combined_data.csv (defaults to pipeline's data dir).")
 @click.option("--start-season", default=2014, type=int)
 @click.option("--end-season", default=2024, type=int)
 def cmd_ingest_historical(file_path, start_season, end_season):
@@ -138,8 +157,7 @@ def cmd_ingest_pff_bulk(data_dir, start_season, end_season):
 @ingest_group.command("nflverse")
 @click.option("--start-season", default=2014, type=int)
 @click.option("--end-season", default=2024, type=int)
-@click.option("--skip-pbp", is_flag=True, default=False,
-              help="Skip play-by-play aggregation (faster, fewer fields).")
+@click.option("--skip-pbp", is_flag=True, default=False, help="Skip play-by-play aggregation (faster, fewer fields).")
 def cmd_ingest_nflverse(start_season, end_season, skip_pbp):
     """Ingest advanced metrics from nflverse (target share, snaps, RZ splits, etc.)."""
     from fantasy_data.ingest.ingest_nflverse import ingest_nflverse
@@ -170,8 +188,7 @@ def cmd_ingest_historical_adp(start_season, end_season):
 
 
 @ingest_group.command("rp")
-@click.option("--dir", "data_dir", required=True,
-              help="Directory with Reception Perception CSV files.")
+@click.option("--dir", "data_dir", required=True, help="Directory with Reception Perception CSV files.")
 def cmd_ingest_rp(data_dir):
     """Ingest Reception Perception WR film-graded metrics."""
     from fantasy_data.ingest.ingest_reception_perception import ingest_reception_perception
@@ -251,10 +268,10 @@ def cmd_compute_competition(season, team):
         if team:
             compute_team_competition(session, team.upper(), season)
         else:
-            teams = [r.team for r in
-                     session.query(CoachingStaff.team)
-                     .filter(CoachingStaff.season == season)
-                     .distinct().all()]
+            teams = [
+                r.team
+                for r in session.query(CoachingStaff.team).filter(CoachingStaff.season == season).distinct().all()
+            ]
             for t in teams:
                 compute_team_competition(session, t, season)
     finally:
@@ -287,6 +304,7 @@ def cmd_report_divergence(season, position, threshold, plot, output_dir):
         print_adp_divergence(session, season, position, threshold)
         if plot:
             from fantasy_data.viz.adp_divergence import plot_adp_divergence
+
             results = get_adp_divergence(session, season, position, threshold)
             pos_label = (position or "all").lower()
             fig = plot_adp_divergence(results, season, pos_label.upper())
@@ -311,6 +329,7 @@ def cmd_report_rankings(player_id, season, plot, output_dir):
         print_player_rankings(session, player_id, season)
         if plot:
             from fantasy_data.viz.player_profile import plot_player_source_breakdown
+
             data = get_player_rankings(session, player_id, season)
             if data:
                 fig = plot_player_source_breakdown(data)
@@ -336,6 +355,7 @@ def cmd_report_variance(season, position, min_sources, plot, output_dir):
         print_rankings_variance(session, season, position, min_sources)
         if plot:
             from fantasy_data.viz.rankings_variance import plot_rankings_variance
+
             results = get_rankings_variance(session, season, position, min_sources)
             pos_label = (position or "all").lower()
             fig = plot_rankings_variance(results, season)
@@ -374,6 +394,7 @@ def cmd_report_trust(season, position, plot, output_dir):
         print_trust_flags(session, season, position)
         if plot:
             from fantasy_data.viz.trust_overview import plot_trust_weights
+
             results = get_trust_flags(session, season, position)
             fig = plot_trust_weights(results, season)
             out_path = f"{output_dir}/trust_flags_{season}.html"
@@ -396,11 +417,7 @@ def cmd_rankings_status(season):
 
     session = get_session()
     try:
-        baseline = (
-            session.query(PlayerSeasonBaseline)
-            .filter(PlayerSeasonBaseline.season == season)
-            .first()
-        )
+        baseline = session.query(PlayerSeasonBaseline).filter(PlayerSeasonBaseline.season == season).first()
         if not baseline or not baseline.rankings_last_updated:
             click.echo(f"No rankings data found for {season} season.")
             return
@@ -442,8 +459,7 @@ def cmd_rankings_status(season):
 @click.option("--start-season", default=2014, type=int)
 @click.option("--end-season", default=2024, type=int)
 @click.option("--target-season", default=2025, type=int)
-@click.option("--skip-pbp", is_flag=True, default=False,
-              help="Skip play-by-play aggregation (faster).")
+@click.option("--skip-pbp", is_flag=True, default=False, help="Skip play-by-play aggregation (faster).")
 @click.option("--lookback", default=3, type=int)
 def cmd_build_history(start_season, end_season, target_season, skip_pbp, lookback):
     """Run full historical build: ingest historical + nflverse, compute trust weights + baselines."""

@@ -31,10 +31,7 @@ def plot_adp_divergence(
         else:
             colors.append(neg)
 
-    opacity = [
-        min(1.0, 0.5 + (r["sources"] or 0) * 0.125)
-        for r in results
-    ]
+    opacity = [min(1.0, 0.5 + (r["sources"] or 0) * 0.125) for r in results]
 
     hover = [
         f"<b>{r['player']}</b> ({r['pos']}, {r['team']})<br>"
@@ -46,17 +43,23 @@ def plot_adp_divergence(
     ]
 
     fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=[r["divergence"] for r in results],
-        y=[r["player"] for r in results],
-        orientation="h",
-        marker=dict(color=colors, opacity=opacity),
-        hovertemplate="%{customdata}<extra></extra>",
-        customdata=hover,
-    ))
+    fig.add_trace(
+        go.Bar(
+            x=[r["divergence"] for r in results],
+            y=[r["player"] for r in results],
+            orientation="h",
+            marker=dict(color=colors, opacity=opacity),
+            hovertemplate="%{customdata}<extra></extra>",
+            customdata=hover,
+        )
+    )
 
     for x_val, dash in [
-        (0, "solid"), (12, "dot"), (-12, "dot"), (20, "dash"), (-20, "dash"),
+        (0, "solid"),
+        (12, "dot"),
+        (-12, "dot"),
+        (20, "dash"),
+        (-20, "dash"),
     ]:
         fig.add_vline(
             x=x_val,

@@ -313,19 +313,33 @@ def report_group():
 @click.option("--season", required=True, type=int)
 @click.option("--position", default=None, help="Filter by position (QB, RB, WR, TE, all).")
 @click.option("--threshold", default=12, type=int, help="Minimum divergence to display.")
+@click.option(
+    "--min-sources",
+    default=None,
+    type=int,
+    help="Drop players backed by fewer than N ranking sources (default 3; 0 disables). "
+    "Few-source players diverge far from ADP on variance rather than disagreement.",
+)
 @click.option("--plot", is_flag=True, default=False, help="Save interactive HTML chart.")
 @click.option("--output-dir", default=".", show_default=True)
-def cmd_report_divergence(season, position, threshold, plot, output_dir):
+def cmd_report_divergence(season, position, threshold, min_sources, plot, output_dir):
     """Show players where sharp consensus disagrees with ADP."""
-    from fantasy_data.reports.adp_divergence import get_adp_divergence, print_adp_divergence
+    from fantasy_data.reports.adp_divergence import (
+        DEFAULT_MIN_SOURCES,
+        get_adp_divergence,
+        print_adp_divergence,
+    )
+
+    if min_sources is None:
+        min_sources = DEFAULT_MIN_SOURCES
 
     session = get_session()
     try:
-        print_adp_divergence(session, season, position, threshold)
+        print_adp_divergence(session, season, position, threshold, min_sources=min_sources)
         if plot:
             from fantasy_data.viz.adp_divergence import plot_adp_divergence
 
-            results = get_adp_divergence(session, season, position, threshold)
+            results = get_adp_divergence(session, season, position, threshold, min_sources=min_sources)
             pos_label = (position or "all").lower()
             fig = plot_adp_divergence(results, season, pos_label.upper())
             out_path = f"{output_dir}/adp_divergence_{season}_{pos_label}.html"

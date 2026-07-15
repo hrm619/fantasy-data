@@ -1,7 +1,7 @@
 """Tests for report modules."""
 
 from fantasy_data.models import PlayerSeasonBaseline
-from fantasy_data.reports.adp_divergence import get_adp_divergence
+from fantasy_data.reports.adp_divergence import count_below_min_sources, get_adp_divergence
 from fantasy_data.reports.rankings import get_player_rankings
 from fantasy_data.reports.rankings_variance import get_rankings_variance
 from fantasy_data.reports.trust_flags import get_trust_flags
@@ -21,6 +21,42 @@ class TestAdpDivergence:
         assert len(results) == 1
         assert results[0]["player"] == "Tyreek Hill"
         assert results[0]["direction"] == "UNDER"
+
+    def test_excludes_players_below_min_sources(self, session, seed_players, seed_baselines):
+        # A 2-source consensus is a mean of two ranks, so it lands far from ADP on
+        # variance rather than disagreement — and then sorts to the top.
+        b = session.get(PlayerSeasonBaseline, "HillTy01_2024")
+        b.sharp_pos_rank = 3.0
+        b.adp_positional_rank = 40
+        b.adp_divergence_pos = 37.0
+        b.adp_divergence_flag = 1
+        b.rankings_source_count = 2
+        session.commit()
+
+        assert get_adp_divergence(session, 2024) == []
+        assert len(get_adp_divergence(session, 2024, min_sources=0)) == 1
+        assert len(get_adp_divergence(session, 2024, min_sources=2)) == 1
+
+    def test_min_sources_exclusions_are_counted_not_silent(self, session, seed_players, seed_baselines):
+        b = session.get(PlayerSeasonBaseline, "HillTy01_2024")
+        b.adp_divergence_pos = 37.0
+        b.adp_divergence_flag = 1
+        b.rankings_source_count = 2
+        session.commit()
+
+        assert count_below_min_sources(session, 2024) == 1
+        assert count_below_min_sources(session, 2024, min_sources=0) == 0
+
+    def test_well_sourced_players_survive_the_default_filter(self, session, seed_players, seed_baselines):
+        b = session.get(PlayerSeasonBaseline, "HillTy01_2024")
+        b.sharp_pos_rank = 3.0
+        b.adp_positional_rank = 18
+        b.adp_divergence_pos = 15.0
+        b.adp_divergence_flag = 1
+        b.rankings_source_count = 4
+        session.commit()
+
+        assert len(get_adp_divergence(session, 2024)) == 1
 
     def test_filters_by_position(self, session, seed_players, seed_baselines):
         b = session.get(PlayerSeasonBaseline, "HillTy01_2024")

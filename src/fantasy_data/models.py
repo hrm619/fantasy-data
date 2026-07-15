@@ -93,6 +93,10 @@ class CoachingStaff(Base):
     season: Mapped[int] = mapped_column(Integer, nullable=False)
     head_coach: Mapped[str] = mapped_column(String, nullable=False)
     offensive_coordinator: Mapped[str | None] = mapped_column(String)
+    # Who actually calls the offensive plays — often the HC rather than the OC.
+    # This, not the OC title, is what oc_continuity_flag tracks when known;
+    # NULL means unverified, and the flag falls back to the OC name.
+    play_caller: Mapped[str | None] = mapped_column(String)
     quarterbacks_coach: Mapped[str | None] = mapped_column(String)
     hc_year_with_team: Mapped[int | None] = mapped_column(Integer)
     oc_year_with_team: Mapped[int | None] = mapped_column(Integer)

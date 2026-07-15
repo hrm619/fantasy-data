@@ -1,21 +1,27 @@
-"""Ingest advanced metrics from nflverse via nfl_data_py.
+"""Ingest advanced metrics from nflverse.
 
 Populates PlayerSeasonBaseline fields that the pipeline's combined_data.csv
 doesn't cover: target_share, snap_share, air_yards_share, RZ/EZ shares,
 down splits, boom/bust rates, consistency scores, and composites.
 
-Uses three nflverse data sources:
-- seasonal_data: target_share, air_yards_share, racr, receiving_air_yards
-- weekly_data: boom/bust rates, consistency scores (game-level aggregation)
+Data sources:
+- stats_player (weekly): target_share, air_yards_share, racr, dominator
+  rating, boom/bust rates, consistency scores
 - snap_counts: snap_share (weekly offense_pct averaged to season)
 - pbp_data: RZ/EZ target shares, down splits, goal-line carries, aDOT
+- NGS / FTN / PFR advanced: tracking and charting metrics
+
+Seasonal and weekly stats are read from the nflverse `stats_player` release
+directly. nfl_data_py (unmaintained since 2024) still points at the frozen
+`player_stats` release, which 404s for 2025+; its other importers are fine
+and still used.
 
 Player ID resolution: nflverse gsis_id → pipeline PLAYER ID via pfr_id
 from nfl_data_py.import_ids().
 """
 
 from datetime import datetime, timezone
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -34,22 +40,86 @@ BUST_THRESHOLD = 5.0
 # Minimum games to compute per-game and rate stats
 MIN_GAMES = 4
 
+# nflverse moved player stats here; the old `player_stats` release that
+# nfl_data_py reads is frozen at 2024 and 404s for later seasons.
+NFLVERSE_STATS_RELEASE = "https://github.com/nflverse/nflverse-data/releases/download/stats_player"
+
+# Team per-game passing totals -> denominators for the share metrics.
+_TEAM_PASS_COLUMNS = {
+    "attempts": "atts",
+    "passing_yards": "p_yds",
+    "passing_tds": "p_tds",
+    "passing_air_yards": "p_ayds",
+}
+
+_PLAYER_SEASONAL_COLUMNS = [
+    "receptions",
+    "targets",
+    "receiving_yards",
+    "receiving_tds",
+    "receiving_air_yards",
+    "receiving_yards_after_catch",
+]
+
+# A player counts as offensive for a season if they touched the ball in it.
+_OFFENSIVE_ACTIVITY_COLUMNS = ["targets", "carries", "attempts"]
+
 
 # ---------------------------------------------------------------------------
 # Fetching (thin wrappers)
 # ---------------------------------------------------------------------------
 
 
-def _fetch_seasonal(seasons: list[int]) -> pd.DataFrame:
-    import nfl_data_py as nfl
-
-    return nfl.import_seasonal_data(seasons, "REG")
+def _weekly_stats_url(season: int) -> str:
+    return f"{NFLVERSE_STATS_RELEASE}/stats_player_week_{season}.parquet"
 
 
 def _fetch_weekly(seasons: list[int]) -> pd.DataFrame:
-    import nfl_data_py as nfl
+    """Fetch weekly player stats from the nflverse `stats_player` release.
 
-    return nfl.import_weekly_data(seasons)
+    Replaces nfl_data_py.import_weekly_data(), which points at the frozen
+    `player_stats` release (no data after 2024). The only schema difference
+    that matters here is `team`, which the old release called `recent_team`.
+
+    `stats_player` covers every player including defenders, while the old
+    release carried only players with offensive stats, so rows are filtered
+    to offensive players to keep the DB comparable across seasons.
+    """
+    frames = [pd.read_parquet(_weekly_stats_url(season)) for season in seasons]
+    df = pd.concat(frames, ignore_index=True)
+    if "recent_team" not in df.columns and "team" in df.columns:
+        df = df.rename(columns={"team": "recent_team"})
+    return _filter_to_offensive_players(df)
+
+
+def _filter_to_offensive_players(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop players with no offensive touches in a season.
+
+    Filters per (player, season) rather than per row: a player's scoreless
+    weeks must survive, since the share denominators sum team pass attempts
+    over every week the player was active.
+    """
+    activity = df.groupby(["player_id", "season"])[_OFFENSIVE_ACTIVITY_COLUMNS].transform("sum").sum(axis=1)
+    return df[activity > 0]
+
+
+def _fetch_seasonal(seasons: list[int]) -> pd.DataFrame:
+    """Build season-level player stats from weekly data.
+
+    Replaces nfl_data_py.import_seasonal_data(). The share columns
+    (`tgt_sh`, `ay_sh`, `dom`) are computed by nfl_data_py rather than
+    supplied by nflverse, so they are reproduced here to keep 2025 on the
+    same scale as the 2014-2024 rows already in the DB. Note the nflverse
+    `target_share`/`air_yards_share` columns are NOT equivalent: they divide
+    by team targets, whereas these divide by team pass attempts.
+
+    `racr` deliberately diverges from nfl_data_py, which sums weekly rates
+    (yielding values like -80..85). It is computed here as a true season
+    rate, matching nflverse's own season-level column. Use the ingest's
+    `overwrite_seasonal` flag to correct seasons loaded before this change.
+    """
+    weekly = _fetch_weekly(seasons)
+    return aggregate_weekly_to_seasonal(weekly)
 
 
 def _fetch_snap_counts(seasons: list[int]) -> pd.DataFrame:
@@ -258,17 +328,102 @@ def _fetch_pfr_rushing(seasons: list[int]) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
+def _safe_ratio(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
+    """Divide, yielding NaN (not inf) where the denominator is zero."""
+    return numerator.div(denominator.where(denominator > 0))
+
+
+def aggregate_weekly_to_seasonal(df: pd.DataFrame) -> pd.DataFrame:
+    """Roll weekly player stats up to season level with share metrics.
+
+    Input: `_fetch_weekly()` output. Output: one row per (player_id, season)
+    carrying the columns `aggregate_seasonal()` reads.
+    """
+    df = df[df["season_type"] == "REG"]
+
+    team_totals = (
+        df.groupby(["recent_team", "season", "week"])[list(_TEAM_PASS_COLUMNS)]
+        .sum()
+        .rename(columns=_TEAM_PASS_COLUMNS)
+        .reset_index()
+    )
+
+    player_cols = ["player_id", "recent_team", "season", "week", *_PLAYER_SEASONAL_COLUMNS]
+    merged = df[player_cols].merge(team_totals, how="left", on=["recent_team", "season", "week"]).fillna(0)
+
+    season_stats = (
+        merged.drop(columns=["recent_team", "week"])
+        .groupby(["player_id", "season"])
+        .sum(numeric_only=True)
+        .reset_index()
+    )
+
+    # Shares use team pass attempts / air yards as denominators, matching
+    # nfl_data_py so these stay comparable with prior seasons in the DB.
+    season_stats["tgt_sh"] = _safe_ratio(season_stats["targets"], season_stats["atts"])
+    season_stats["ay_sh"] = _safe_ratio(season_stats["receiving_air_yards"], season_stats["p_ayds"])
+
+    ry_sh = _safe_ratio(season_stats["receiving_yards"], season_stats["p_yds"])
+    rtd_sh = _safe_ratio(season_stats["receiving_tds"], season_stats["p_tds"])
+    season_stats["dom"] = (ry_sh + rtd_sh) / 2
+
+    season_stats["racr"] = _safe_ratio(season_stats["receiving_yards"], season_stats["receiving_air_yards"])
+
+    return season_stats
+
+
+SEASONAL_BASELINE_FIELDS = [
+    "target_share",
+    "air_yards_share",
+    "racr",
+    "yards_after_catch_per_rec",
+    "avg_depth_of_target",
+    "dominator_rating",
+]
+
+
+def apply_seasonal_fields(baseline: PlayerSeasonBaseline, row: Any, overwrite: bool) -> None:
+    """Write seasonal fields onto a baseline row, plus the derived WOPR.
+
+    Honours the no-overwrite rule by default. Under `overwrite` the incoming
+    value wins outright — including when it is absent, which nulls the field.
+    Skipping absent values instead would strand the very stale numbers a
+    backfill exists to correct.
+    """
+    for field in SEASONAL_BASELINE_FIELDS:
+        val = row.get(field)
+        missing = val is None or (isinstance(val, float) and np.isnan(val))
+        if overwrite:
+            setattr(baseline, field, None if missing else float(val))
+        elif not missing and getattr(baseline, field, None) is None:
+            setattr(baseline, field, float(val))
+
+    # WOPR derives from the two shares, so a backfill has to recompute it.
+    if baseline.target_share is not None and baseline.air_yards_share is not None:
+        if overwrite or baseline.wopr is None:
+            baseline.wopr = (1.5 * baseline.target_share) + (0.7 * baseline.air_yards_share)
+    elif overwrite:
+        baseline.wopr = None
+
+
 def aggregate_seasonal(df: pd.DataFrame) -> pd.DataFrame:
     """Extract fields from nflverse seasonal aggregates.
 
-    Input: nfl_data_py.import_seasonal_data() output.
+    Input: `_fetch_seasonal()` output.
     Output: One row per (player_id, season) with baseline-ready fields.
     """
+    # These columns have been renamed upstream twice, and a missing one used
+    # to silently ingest NULLs. Fail loudly instead.
+    required = ["tgt_sh", "ay_sh", "racr", "dom"]
+    missing = [column for column in required if column not in df.columns]
+    if missing:
+        raise ValueError(f"seasonal data missing expected columns: {missing} (upstream schema change?)")
+
     out = df[["player_id", "season"]].copy()
-    out["target_share"] = df.get("tgt_sh")
-    out["air_yards_share"] = df.get("ay_sh")
-    out["racr"] = df.get("racr")
-    out["dominator_rating"] = df.get("dom")
+    out["target_share"] = df["tgt_sh"]
+    out["air_yards_share"] = df["ay_sh"]
+    out["racr"] = df["racr"]
+    out["dominator_rating"] = df["dom"]
 
     # YAC per reception
     yac = df.get("receiving_yards_after_catch")
@@ -524,6 +679,7 @@ def ingest_nflverse(
     seasons: list[int],
     skip_pbp: bool = False,
     verbose: bool = True,
+    overwrite_seasonal: bool = False,
 ) -> dict[str, int]:
     """Orchestrate full nflverse ingest for given seasons.
 
@@ -532,6 +688,10 @@ def ingest_nflverse(
         seasons: List of seasons to process.
         skip_pbp: Skip play-by-play aggregation (faster, fewer fields).
         verbose: Print progress.
+        overwrite_seasonal: Overwrite the seasonal share fields (and WOPR)
+            instead of honouring the no-overwrite rule. Needed to correct
+            seasons ingested before the `stats_player` migration, whose
+            `racr` was a sum of weekly rates rather than a season rate.
 
     Returns:
         Stats dict with counts.
@@ -702,24 +862,7 @@ def ingest_nflverse(
             )
             session.add(baseline)
 
-        # Set seasonal fields (only if NULL)
-        for field in [
-            "target_share",
-            "air_yards_share",
-            "racr",
-            "yards_after_catch_per_rec",
-            "avg_depth_of_target",
-            "dominator_rating",
-        ]:
-            val = row.get(field)
-            if val is not None and not (isinstance(val, float) and np.isnan(val)):
-                if getattr(baseline, field, None) is None:
-                    setattr(baseline, field, float(val))
-
-        # Compute WOPR if we have inputs
-        if baseline.target_share and baseline.air_yards_share:
-            if baseline.wopr is None:
-                baseline.wopr = (1.5 * baseline.target_share) + (0.7 * baseline.air_yards_share)
+        apply_seasonal_fields(baseline, row, overwrite=overwrite_seasonal)
 
         stats["baselines_updated"] += 1
 
@@ -826,10 +969,13 @@ def ingest_nflverse(
             if not baseline:
                 continue
 
-            # drop_rate from PFR (film-verified, better than PBP-derived)
-            drop_pct = row.get("drop_percent")
-            if pd.notna(drop_pct) and baseline.drop_rate is None:
-                baseline.drop_rate = float(drop_pct)
+            # PFR's `drop_percent` is deliberately NOT written to `drop_rate`.
+            # PFF owns that field: PFR only covers 2018+, and the two are
+            # different measurements rather than one with noise — drops over
+            # ALL targets vs over CATCHABLE targets, 1.28x apart and only
+            # r=0.60 correlated on the same players. Mixing them by season put
+            # a definitional break at 2018 in a field that gets trust-weighted
+            # across seasons. PFF spans 2014-2025 with one definition.
 
             # broken_tackle_rate = broken tackles / receptions
             brk = row.get("brk_tkl")

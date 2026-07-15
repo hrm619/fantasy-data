@@ -41,6 +41,7 @@ def cmd_seed_coaching(file_path):
             entry["team"] = standardize_team(entry["team"])
             entry["head_coach"] = standardize_coach_name(entry.get("head_coach"))
             entry["offensive_coordinator"] = standardize_coach_name(entry.get("offensive_coordinator"))
+            entry["play_caller"] = standardize_coach_name(entry.get("play_caller"))
             entry["quarterbacks_coach"] = standardize_coach_name(entry.get("quarterbacks_coach"))
             staff_id = f"{entry['team']}_{entry['season']}"
             staff = session.get(CoachingStaff, staff_id)
@@ -124,7 +125,7 @@ def cmd_ingest_pff(file_path, season):
 @ingest_group.command("historical")
 @click.option("--file", "file_path", default=None, help="Path to combined_data.csv (defaults to pipeline's data dir).")
 @click.option("--start-season", default=2014, type=int)
-@click.option("--end-season", default=2024, type=int)
+@click.option("--end-season", default=2025, type=int)
 def cmd_ingest_historical(file_path, start_season, end_season):
     """Ingest historical box score stats from fantasy_data_pipeline combined_data.csv."""
     from fantasy_data.ingest.ingest_historical import run_historical_ingest
@@ -156,16 +157,22 @@ def cmd_ingest_pff_bulk(data_dir, start_season, end_season):
 
 @ingest_group.command("nflverse")
 @click.option("--start-season", default=2014, type=int)
-@click.option("--end-season", default=2024, type=int)
+@click.option("--end-season", default=2025, type=int)
 @click.option("--skip-pbp", is_flag=True, default=False, help="Skip play-by-play aggregation (faster, fewer fields).")
-def cmd_ingest_nflverse(start_season, end_season, skip_pbp):
+@click.option(
+    "--overwrite-seasonal",
+    is_flag=True,
+    default=False,
+    help="Overwrite target_share/air_yards_share/racr/dominator_rating/WOPR instead of only filling NULLs.",
+)
+def cmd_ingest_nflverse(start_season, end_season, skip_pbp, overwrite_seasonal):
     """Ingest advanced metrics from nflverse (target share, snaps, RZ splits, etc.)."""
     from fantasy_data.ingest.ingest_nflverse import ingest_nflverse
 
     seasons = list(range(start_season, end_season + 1))
     session = get_session()
     try:
-        stats = ingest_nflverse(session, seasons, skip_pbp=skip_pbp)
+        stats = ingest_nflverse(session, seasons, skip_pbp=skip_pbp, overwrite_seasonal=overwrite_seasonal)
         click.echo(f"Done: {stats}")
     finally:
         session.close()
@@ -226,6 +233,19 @@ def cmd_ingest_ngs(file_path, season):
 def compute_group():
     """Run compute pipelines."""
     pass
+
+
+@compute_group.command("coaching-continuity")
+@click.option("--season", required=True, type=int)
+def cmd_compute_coaching_continuity(season):
+    """Derive coaching_staff continuity flags for a season from the prior season's staff."""
+    from fantasy_data.compute.compute_coaching_continuity import compute_coaching_continuity
+
+    session = get_session()
+    try:
+        compute_coaching_continuity(session, season)
+    finally:
+        session.close()
 
 
 @compute_group.command("trust-weights")
@@ -457,8 +477,8 @@ def cmd_rankings_status(season):
 
 @cli.command("build-history")
 @click.option("--start-season", default=2014, type=int)
-@click.option("--end-season", default=2024, type=int)
-@click.option("--target-season", default=2025, type=int)
+@click.option("--end-season", default=2025, type=int)
+@click.option("--target-season", default=2026, type=int)
 @click.option("--skip-pbp", is_flag=True, default=False, help="Skip play-by-play aggregation (faster).")
 @click.option("--lookback", default=3, type=int)
 def cmd_build_history(start_season, end_season, target_season, skip_pbp, lookback):

@@ -186,10 +186,15 @@ twice (see "Ordering traps" below).
 
 **Ordering traps** (both hit during the 2026 refresh, both silent, both found only by auditing the
 blend against a hand-recomputed one):
-- **Compute before every source has landed** → the blend quietly drops that season. 2026's
-  `route_participation_rate`/`yards_per_route_run` were averaged from 2023-2024 only, because
-  `pff-bulk` had not been re-run when `compute baselines` executed. Re-running afterwards is a
-  **no-op** — the no-overwrite rule skips the now-populated field. You must NULL the column first.
+- **Compute before every source has landed** → the blend quietly drops that season, and a plain
+  re-run will **not** fix it: the no-overwrite rule skips the now-populated field, so the stale
+  blend survives. Use **`compute baselines --season N --recompute`**, which clears the aggregable
+  fields (and the `wopr`/`market_share_score` composites derived from them) before rebuilding.
+  This bit twice in the 2026 refresh — `route_participation_rate`/`yards_per_route_run` were
+  averaged from 2023-2024 only because `pff-bulk` had not been re-run yet, and five nflverse-fed
+  fields (`snap_share`, `carries_per_game`, `total_touches_per_game`, `avg_depth_of_target`,
+  `yards_after_catch_per_rec`) had the same defect across 29 rows. Both were invisible in aggregate
+  and found only by re-deriving the blend and diffing.
 - **`compute trust-weights` before `compute baselines`** → weights land on only the rows that existed
   at the time (2026: 216 of 1012). Nothing errors; `compute_baselines` later falls back to
   `w = data_trust_weight or 0.5` silently.

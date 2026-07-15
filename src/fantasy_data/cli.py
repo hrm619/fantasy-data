@@ -264,13 +264,20 @@ def cmd_compute_trust(season):
 @compute_group.command("baselines")
 @click.option("--season", required=True, type=int)
 @click.option("--lookback", default=3, type=int, help="Number of prior seasons to consider.")
-def cmd_compute_baselines(season, lookback):
+@click.option(
+    "--recompute",
+    is_flag=True,
+    default=False,
+    help="Clear the season's aggregable fields first and rebuild the blend. Without this a re-run "
+    "is a no-op, so a blend computed before a lookback season's data landed survives unchanged.",
+)
+def cmd_compute_baselines(season, lookback, recompute):
     """Compute trust-weighted multi-season baselines."""
     from fantasy_data.compute.compute_baselines import compute_all_baselines
 
     session = get_session()
     try:
-        compute_all_baselines(session, season, lookback)
+        compute_all_baselines(session, season, lookback, recompute=recompute)
     finally:
         session.close()
 

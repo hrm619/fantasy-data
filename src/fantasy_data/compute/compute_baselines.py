@@ -57,6 +57,10 @@ AGGREGABLE_FIELDS = [
     "consistency_score",
 ]
 
+# Composites derived from the aggregable fields below — they go stale if the
+# fields they come from are rebuilt, so a recompute has to clear them too.
+DERIVED_FIELDS = ["wopr", "market_share_score"]
+
 
 def compute_weighted_baseline(
     session: Session,
@@ -113,14 +117,36 @@ def compute_all_baselines(
     target_season: int,
     lookback_seasons: int = 3,
     verbose: bool = True,
+    recompute: bool = False,
 ) -> dict[str, int]:
     """Compute weighted baselines for all players with historical data.
 
     Stores results as a new baseline record for the target season.
     Only populates the aggregable fields — does not overwrite existing
     rankings or PFF grade data.
+
+    Args:
+        recompute: Clear the aggregable fields for `target_season` first, so the
+            blend is rebuilt from scratch. Without this the no-overwrite rule
+            makes a second run a silent no-op, which is a trap: if a lookback
+            season gained data after the first run, the stale blend that
+            excluded it survives. That happened twice during the 2026 refresh —
+            once when PFF landed after the first compute (route_participation_
+            rate, yards_per_route_run) and once for five nflverse-fed fields.
+            Use it whenever a lookback season's data has changed.
     """
-    stats = {"computed": 0, "no_history": 0}
+    stats = {"computed": 0, "no_history": 0, "cleared": 0}
+
+    if recompute:
+        targets = session.query(PlayerSeasonBaseline).filter(PlayerSeasonBaseline.season == target_season).all()
+        for baseline in targets:
+            for field in (*AGGREGABLE_FIELDS, *DERIVED_FIELDS):
+                if getattr(baseline, field, None) is not None:
+                    setattr(baseline, field, None)
+                    stats["cleared"] += 1
+        session.flush()
+        if verbose:
+            print(f"Cleared {stats['cleared']} values across {len(targets)} {target_season} rows before recompute")
 
     # Get all unique player_ids that have data in lookback window
     player_ids = (

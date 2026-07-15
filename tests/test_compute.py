@@ -7,6 +7,7 @@ from fantasy_data.compute.compute_trust_weights import (
     compute_all_trust_weights,
 )
 from fantasy_data.compute.compute_baselines import (
+    compute_all_baselines,
     compute_weighted_baseline,
 )
 from fantasy_data.compute.compute_competition import (
@@ -222,6 +223,65 @@ class TestComputeWeightedBaseline:
     def test_no_history(self, session, seed_players):
         result = compute_weighted_baseline(session, "MahomPa01", 2025)
         assert result == {}
+
+
+class TestRecomputeBaselines:
+    def _blend_inputs(self, session):
+        """One prior season the blend can see, plus a target row to write into."""
+        b = session.get(PlayerSeasonBaseline, "HillTy01_2024")
+        b.data_trust_weight = 1.0
+        b.target_share = 0.20
+        session.commit()
+
+    def test_rerun_without_recompute_keeps_a_stale_blend(self, session, seed_players, seed_baselines):
+        # The trap: a blend computed before a lookback season's data landed
+        # survives a plain re-run, because no-overwrite skips the populated field.
+        self._blend_inputs(session)
+        compute_all_baselines(session, 2025, verbose=False)
+        assert session.get(PlayerSeasonBaseline, "HillTy01_2025").target_share == pytest.approx(0.20)
+
+        # A lookback season's value changes...
+        session.get(PlayerSeasonBaseline, "HillTy01_2024").target_share = 0.30
+        session.commit()
+
+        compute_all_baselines(session, 2025, verbose=False)
+        assert session.get(PlayerSeasonBaseline, "HillTy01_2025").target_share == pytest.approx(0.20)
+
+    def test_recompute_rebuilds_the_blend(self, session, seed_players, seed_baselines):
+        self._blend_inputs(session)
+        compute_all_baselines(session, 2025, verbose=False)
+        session.get(PlayerSeasonBaseline, "HillTy01_2024").target_share = 0.30
+        session.commit()
+
+        compute_all_baselines(session, 2025, verbose=False, recompute=True)
+        assert session.get(PlayerSeasonBaseline, "HillTy01_2025").target_share == pytest.approx(0.30)
+
+    def test_recompute_rebuilds_derived_composites(self, session, seed_players, seed_baselines):
+        # wopr derives from the shares, so it goes stale with them.
+        b = session.get(PlayerSeasonBaseline, "HillTy01_2024")
+        b.data_trust_weight = 1.0
+        b.target_share, b.air_yards_share = 0.20, 0.10
+        session.commit()
+        compute_all_baselines(session, 2025, verbose=False)
+        first = session.get(PlayerSeasonBaseline, "HillTy01_2025").wopr
+
+        b.target_share = 0.40
+        session.commit()
+        compute_all_baselines(session, 2025, verbose=False, recompute=True)
+        rebuilt = session.get(PlayerSeasonBaseline, "HillTy01_2025").wopr
+        assert rebuilt != pytest.approx(first)
+        assert rebuilt == pytest.approx(1.5 * 0.40 + 0.7 * 0.10)
+
+    def test_recompute_leaves_non_aggregable_fields_alone(self, session, seed_players, seed_baselines):
+        # Rankings/ADP are not the blend's to clear.
+        self._blend_inputs(session)
+        compute_all_baselines(session, 2025, verbose=False)
+        target = session.get(PlayerSeasonBaseline, "HillTy01_2025")
+        target.adp_consensus = 12.0
+        session.commit()
+
+        compute_all_baselines(session, 2025, verbose=False, recompute=True)
+        assert session.get(PlayerSeasonBaseline, "HillTy01_2025").adp_consensus == 12.0
 
 
 class TestComputeRouteOverlap:

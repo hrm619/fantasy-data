@@ -241,6 +241,13 @@ class PlayerSeasonBaseline(Base):
     boom_rate: Mapped[float | None] = mapped_column(Float)
     bust_rate: Mapped[float | None] = mapped_column(Float)
 
+    # Many ingests write this table and the no-overwrite rule makes the result
+    # order-dependent, so "which ran first, and had the sources landed yet?" is
+    # the question every defect here reduces to. Without these it can only be
+    # inferred from the values. NULL on rows written before 2026-07-15.
+    created_at: Mapped[str | None] = mapped_column(String, default=_now_iso)
+    updated_at: Mapped[str | None] = mapped_column(String, default=_now_iso, onupdate=_now_iso)
+
     player: Mapped["Player"] = relationship(back_populates="baselines")
 
     __table_args__ = (

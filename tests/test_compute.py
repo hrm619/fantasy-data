@@ -225,6 +225,37 @@ class TestComputeWeightedBaseline:
         assert result == {}
 
 
+class TestMissingTrustWeight:
+    def test_zero_weight_is_honoured_not_treated_as_missing(self, session, seed_players, seed_baselines):
+        # `or 0.5` would turn a real 0.0 into 0.5 — a 10x error on a field that
+        # multiplies through every blended value.
+        a = session.get(PlayerSeasonBaseline, "HillTy01_2024")
+        a.data_trust_weight = 0.0
+        a.target_share = 0.40
+        session.add(
+            PlayerSeasonBaseline(
+                baseline_id="HillTy01_2023",
+                player_id="HillTy01",
+                season=2023,
+                data_trust_weight=1.0,
+                target_share=0.10,
+            )
+        )
+        session.commit()
+
+        result = compute_weighted_baseline(session, "HillTy01", 2025)
+        # 2024 contributes nothing at weight 0, so the blend is purely 2023.
+        assert result["target_share"] == pytest.approx(0.10)
+
+    def test_missing_weight_falls_back_and_is_counted(self, session, seed_players, seed_baselines):
+        b = session.get(PlayerSeasonBaseline, "HillTy01_2024")
+        b.data_trust_weight = None
+        session.commit()
+
+        stats = compute_all_baselines(session, 2025, verbose=False)
+        assert stats["missing_trust_weight"] >= 1
+
+
 class TestRecomputeBaselines:
     def _blend_inputs(self, session):
         """One prior season the blend can see, plus a target row to write into."""

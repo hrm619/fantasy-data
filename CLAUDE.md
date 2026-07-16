@@ -196,11 +196,16 @@ blend against a hand-recomputed one):
   `yards_after_catch_per_rec`) had the same defect across 29 rows. Both were invisible in aggregate
   and found only by re-deriving the blend and diffing.
 - **`compute trust-weights` before `compute baselines`** → weights land on only the rows that existed
-  at the time (2026: 216 of 1012). Nothing errors; `compute_baselines` later falls back to
-  `w = data_trust_weight or 0.5` silently.
+  at the time (2026: 216 of 1012), because trust-weights only updates rows that already exist while
+  baselines is what creates most of them. `compute baselines` now WARNS when lookback rows have no
+  weight (it blends them at `MISSING_TRUST_WEIGHT = 0.5`), but the warning is a smell, not a fix —
+  run trust-weights for the lookback seasons and then again for the target.
 
 To verify a blend actually used the seasons you think it did, recompute one player by hand and compare
 against the stored value — a wrong blend is arithmetically plausible and invisible in aggregate.
+`player_season_baseline.created_at`/`updated_at` (added 2026-07-15, NULL on older rows) exist to make
+"which ingest wrote this, and had the sources landed yet?" answerable from the data rather than
+inferred from the values.
 
 Or use `fantasy-data build-history` for an automated Phase 2-4 sequence.
 

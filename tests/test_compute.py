@@ -1,10 +1,11 @@
 """Tests for compute modules (trust weights, baselines, competition)."""
 
 import pytest
-from fantasy_data.models import PlayerSeasonBaseline
+from fantasy_data.models import CoachingStaff, PlayerSeasonBaseline
 from fantasy_data.compute.compute_trust_weights import (
     compute_trust_weight,
     compute_all_trust_weights,
+    compute_team_tenure,
 )
 from fantasy_data.compute.compute_baselines import (
     compute_all_baselines,
@@ -223,6 +224,55 @@ class TestComputeWeightedBaseline:
     def test_no_history(self, session, seed_players):
         result = compute_weighted_baseline(session, "MahomPa01", 2025)
         assert result == {}
+
+
+class TestComputeTeamTenure:
+    def _seasons(self, session, player_id, mapping):
+        for season, team in mapping.items():
+            session.add(
+                PlayerSeasonBaseline(
+                    baseline_id=f"{player_id}_{season}",
+                    player_id=player_id,
+                    season=season,
+                    team=team,
+                )
+            )
+        session.commit()
+
+    def test_counts_consecutive_seasons_with_the_same_team(self, session, seed_players):
+        self._seasons(session, "HillTy01", {2022: "MIA", 2023: "MIA", 2024: "MIA"})
+        assert compute_team_tenure(session, 2024)["HillTy01"] == 3
+
+    def test_a_team_change_restarts_the_count(self, session, seed_players):
+        # The case the old years_pro cap got wrong: a veteran joining a
+        # long-standing system has been in it for one season, not twelve.
+        self._seasons(session, "HillTy01", {2022: "KC", 2023: "KC", 2024: "MIA"})
+        assert compute_team_tenure(session, 2024)["HillTy01"] == 1
+
+    def test_a_missing_season_ends_the_run(self, session, seed_players):
+        self._seasons(session, "HillTy01", {2021: "MIA", 2023: "MIA", 2024: "MIA"})
+        assert compute_team_tenure(session, 2024)["HillTy01"] == 2
+
+    def test_unknown_team_is_omitted_rather_than_guessed(self, session, seed_players):
+        self._seasons(session, "HillTy01", {2024: None})
+        assert "HillTy01" not in compute_team_tenure(session, 2024)
+
+    def test_seasons_in_system_is_capped_by_time_on_the_team(
+        self, session, seed_players, seed_coaching, seed_baselines
+    ):
+        # A 10-year-old system, but the player arrived last season.
+        staff = session.query(CoachingStaff).filter_by(team="MIA", season=2024).first()
+        if staff is None:
+            staff = CoachingStaff(staff_id="MIA_2024", team="MIA", season=2024, head_coach="Mike McDaniel")
+            session.add(staff)
+        staff.system_year_with_team = 10
+        session.commit()
+        self._seasons(session, "HillTy01", {2023: "KC"})
+        session.get(PlayerSeasonBaseline, "HillTy01_2024").team = "MIA"
+        session.commit()
+
+        compute_all_trust_weights(session, 2024, verbose=False)
+        assert session.get(PlayerSeasonBaseline, "HillTy01_2024").seasons_in_system == 1
 
 
 class TestMissingTrustWeight:

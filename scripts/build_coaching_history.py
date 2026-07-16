@@ -864,7 +864,7 @@ def build_coaching_history() -> list[dict]:
                 "head_coach": hc,
                 "offensive_coordinator": oc,
                 "hc_year_with_team": hc_tenure,
-                "oc_year_with_team": oc_tenure,
+                "system_year_with_team": oc_tenure,
                 "hc_continuity_flag": hc_continuity,
                 "oc_continuity_flag": oc_continuity,
                 "system_tag": get_system_tag(hc),

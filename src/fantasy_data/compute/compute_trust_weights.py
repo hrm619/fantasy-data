@@ -171,8 +171,8 @@ def compute_all_trust_weights(
         baseline.oc_continuity = oc_cont
 
         # Compute seasons_in_system from OC tenure
-        if staff and staff.oc_year_with_team:
-            baseline.seasons_in_system = min(staff.oc_year_with_team, player.years_pro or 1)
+        if staff and staff.system_year_with_team:
+            baseline.seasons_in_system = min(staff.system_year_with_team, player.years_pro or 1)
 
         # Set projection_uncertain_flag
         baseline.projection_uncertain_flag = 1 if weight < 0.7 else 0

@@ -81,7 +81,9 @@ def compute_coaching_continuity(session: Session, season: int, verbose: bool = T
         # continuity, otherwise this is year one. Hand-authored tenure is what
         # let Las Vegas claim a third Antonio Pierce year he never coached.
         current.hc_year_with_team = _next_tenure(hc_continuous, previous.hc_year_with_team if previous else None)
-        current.oc_year_with_team = _next_tenure(oc_continuous, previous.oc_year_with_team if previous else None)
+        current.system_year_with_team = _next_tenure(
+            oc_continuous, previous.system_year_with_team if previous else None
+        )
 
         stats["updated"] += 1
         stats["hc_changes"] += int(not hc_continuous)

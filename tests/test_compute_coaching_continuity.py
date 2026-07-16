@@ -86,7 +86,7 @@ class TestComputeCoachingContinuity:
     def test_tenure_increments_on_continuity_and_resets_on_change(self, session):
         prior = _staff(team="KC", season=2025, hc="Andy Reid", oc="Matt Nagy", play_caller="Andy Reid")
         prior.hc_year_with_team = 13
-        prior.oc_year_with_team = 3
+        prior.system_year_with_team = 3
         session.add(prior)
         session.add(_staff(team="KC", season=2026, hc="Andy Reid", oc="Eric Bieniemy", play_caller="Andy Reid"))
         session.add(_staff(team="LV", season=2025, hc="Antonio Pierce", oc="Luke Getsy"))
@@ -97,9 +97,9 @@ class TestComputeCoachingContinuity:
         kc = session.get(CoachingStaff, "KC_2026")
         lv = session.get(CoachingStaff, "LV_2026")
         assert kc.hc_year_with_team == 14
-        assert kc.oc_year_with_team == 4  # play caller unchanged, so the system carries on
+        assert kc.system_year_with_team == 4  # play caller unchanged, so the system carries on
         assert lv.hc_year_with_team == 1
-        assert lv.oc_year_with_team == 1
+        assert lv.system_year_with_team == 1
 
     def test_counts_the_basis_used_per_team(self, session):
         session.add(_staff(team="KC", season=2025, hc="Andy Reid", oc="Matt Nagy", play_caller="Andy Reid"))

@@ -131,7 +131,7 @@ def seed_coaching(session):
             oc_continuity_flag=0,
             qb_continuity_flag=1,
             hc_year_with_team=12,
-            oc_year_with_team=1,
+            system_year_with_team=1,
             system_tag="REID_WEST_COAST",
         ),
         CoachingStaff(
@@ -144,7 +144,7 @@ def seed_coaching(session):
             oc_continuity_flag=1,
             qb_continuity_flag=1,
             hc_year_with_team=3,
-            oc_year_with_team=3,
+            system_year_with_team=3,
             system_tag="SHANAHAN_ZONE",
         ),
         CoachingStaff(
@@ -157,7 +157,7 @@ def seed_coaching(session):
             oc_continuity_flag=0,
             qb_continuity_flag=1,
             hc_year_with_team=6,
-            oc_year_with_team=1,
+            system_year_with_team=1,
             system_tag="MCVAY_TREE",
         ),
         CoachingStaff(
@@ -170,7 +170,7 @@ def seed_coaching(session):
             oc_continuity_flag=1,
             qb_continuity_flag=1,
             hc_year_with_team=2,
-            oc_year_with_team=2,
+            system_year_with_team=2,
             system_tag="SHANAHAN_ZONE",
         ),
         CoachingStaff(
@@ -183,7 +183,7 @@ def seed_coaching(session):
             oc_continuity_flag=0,
             qb_continuity_flag=1,
             hc_year_with_team=1,
-            oc_year_with_team=1,
+            system_year_with_team=1,
             system_tag="OTHER",
         ),
     ]

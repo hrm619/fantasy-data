@@ -99,7 +99,12 @@ class CoachingStaff(Base):
     play_caller: Mapped[str | None] = mapped_column(String)
     quarterbacks_coach: Mapped[str | None] = mapped_column(String)
     hc_year_with_team: Mapped[int | None] = mapped_column(Integer)
-    oc_year_with_team: Mapped[int | None] = mapped_column(Integer)
+    # Years the current offensive SYSTEM has been in place, which is not the
+    # OC's tenure: it counts up while oc_continuity_flag holds, and that flag
+    # tracks the play caller. SF 2026 reads 10 (Shanahan's system) though Klay
+    # Kubiak is in year 2 as OC. Named for what it measures because it feeds
+    # `seasons_in_system`; was `oc_year_with_team`, which claimed otherwise.
+    system_year_with_team: Mapped[int | None] = mapped_column(Integer)
     hc_continuity_flag: Mapped[int | None] = mapped_column(Integer, default=0)
     oc_continuity_flag: Mapped[int | None] = mapped_column(Integer, default=0)
     starting_qb: Mapped[str | None] = mapped_column(String)  # Starting QB name (for audit/display)

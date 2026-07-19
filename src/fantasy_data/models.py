@@ -93,9 +93,18 @@ class CoachingStaff(Base):
     season: Mapped[int] = mapped_column(Integer, nullable=False)
     head_coach: Mapped[str] = mapped_column(String, nullable=False)
     offensive_coordinator: Mapped[str | None] = mapped_column(String)
+    # Who actually calls the offensive plays — often the HC rather than the OC.
+    # This, not the OC title, is what oc_continuity_flag tracks when known;
+    # NULL means unverified, and the flag falls back to the OC name.
+    play_caller: Mapped[str | None] = mapped_column(String)
     quarterbacks_coach: Mapped[str | None] = mapped_column(String)
     hc_year_with_team: Mapped[int | None] = mapped_column(Integer)
-    oc_year_with_team: Mapped[int | None] = mapped_column(Integer)
+    # Years the current offensive SYSTEM has been in place, which is not the
+    # OC's tenure: it counts up while oc_continuity_flag holds, and that flag
+    # tracks the play caller. SF 2026 reads 10 (Shanahan's system) though Klay
+    # Kubiak is in year 2 as OC. Named for what it measures because it feeds
+    # `seasons_in_system`; was `oc_year_with_team`, which claimed otherwise.
+    system_year_with_team: Mapped[int | None] = mapped_column(Integer)
     hc_continuity_flag: Mapped[int | None] = mapped_column(Integer, default=0)
     oc_continuity_flag: Mapped[int | None] = mapped_column(Integer, default=0)
     starting_qb: Mapped[str | None] = mapped_column(String)  # Starting QB name (for audit/display)
@@ -236,6 +245,13 @@ class PlayerSeasonBaseline(Base):
     consistency_score: Mapped[float | None] = mapped_column(Float)
     boom_rate: Mapped[float | None] = mapped_column(Float)
     bust_rate: Mapped[float | None] = mapped_column(Float)
+
+    # Many ingests write this table and the no-overwrite rule makes the result
+    # order-dependent, so "which ran first, and had the sources landed yet?" is
+    # the question every defect here reduces to. Without these it can only be
+    # inferred from the values. NULL on rows written before 2026-07-15.
+    created_at: Mapped[str | None] = mapped_column(String, default=_now_iso)
+    updated_at: Mapped[str | None] = mapped_column(String, default=_now_iso, onupdate=_now_iso)
 
     player: Mapped["Player"] = relationship(back_populates="baselines")
 

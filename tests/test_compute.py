@@ -1,12 +1,14 @@
 """Tests for compute modules (trust weights, baselines, competition)."""
 
 import pytest
-from fantasy_data.models import PlayerSeasonBaseline
+from fantasy_data.models import CoachingStaff, PlayerSeasonBaseline
 from fantasy_data.compute.compute_trust_weights import (
     compute_trust_weight,
     compute_all_trust_weights,
+    compute_team_tenure,
 )
 from fantasy_data.compute.compute_baselines import (
+    compute_all_baselines,
     compute_weighted_baseline,
 )
 from fantasy_data.compute.compute_competition import (
@@ -222,6 +224,145 @@ class TestComputeWeightedBaseline:
     def test_no_history(self, session, seed_players):
         result = compute_weighted_baseline(session, "MahomPa01", 2025)
         assert result == {}
+
+
+class TestComputeTeamTenure:
+    def _seasons(self, session, player_id, mapping):
+        for season, team in mapping.items():
+            session.add(
+                PlayerSeasonBaseline(
+                    baseline_id=f"{player_id}_{season}",
+                    player_id=player_id,
+                    season=season,
+                    team=team,
+                )
+            )
+        session.commit()
+
+    def test_counts_consecutive_seasons_with_the_same_team(self, session, seed_players):
+        self._seasons(session, "HillTy01", {2022: "MIA", 2023: "MIA", 2024: "MIA"})
+        assert compute_team_tenure(session, 2024)["HillTy01"] == 3
+
+    def test_a_team_change_restarts_the_count(self, session, seed_players):
+        # The case the old years_pro cap got wrong: a veteran joining a
+        # long-standing system has been in it for one season, not twelve.
+        self._seasons(session, "HillTy01", {2022: "KC", 2023: "KC", 2024: "MIA"})
+        assert compute_team_tenure(session, 2024)["HillTy01"] == 1
+
+    def test_a_missing_season_ends_the_run(self, session, seed_players):
+        self._seasons(session, "HillTy01", {2021: "MIA", 2023: "MIA", 2024: "MIA"})
+        assert compute_team_tenure(session, 2024)["HillTy01"] == 2
+
+    def test_unknown_team_is_omitted_rather_than_guessed(self, session, seed_players):
+        self._seasons(session, "HillTy01", {2024: None})
+        assert "HillTy01" not in compute_team_tenure(session, 2024)
+
+    def test_seasons_in_system_is_capped_by_time_on_the_team(
+        self, session, seed_players, seed_coaching, seed_baselines
+    ):
+        # A 10-year-old system, but the player arrived last season.
+        staff = session.query(CoachingStaff).filter_by(team="MIA", season=2024).first()
+        if staff is None:
+            staff = CoachingStaff(staff_id="MIA_2024", team="MIA", season=2024, head_coach="Mike McDaniel")
+            session.add(staff)
+        staff.system_year_with_team = 10
+        session.commit()
+        self._seasons(session, "HillTy01", {2023: "KC"})
+        session.get(PlayerSeasonBaseline, "HillTy01_2024").team = "MIA"
+        session.commit()
+
+        compute_all_trust_weights(session, 2024, verbose=False)
+        assert session.get(PlayerSeasonBaseline, "HillTy01_2024").seasons_in_system == 1
+
+
+class TestMissingTrustWeight:
+    def test_zero_weight_is_honoured_not_treated_as_missing(self, session, seed_players, seed_baselines):
+        # `or 0.5` would turn a real 0.0 into 0.5 — a 10x error on a field that
+        # multiplies through every blended value.
+        a = session.get(PlayerSeasonBaseline, "HillTy01_2024")
+        a.data_trust_weight = 0.0
+        a.target_share = 0.40
+        session.add(
+            PlayerSeasonBaseline(
+                baseline_id="HillTy01_2023",
+                player_id="HillTy01",
+                season=2023,
+                data_trust_weight=1.0,
+                target_share=0.10,
+            )
+        )
+        session.commit()
+
+        result = compute_weighted_baseline(session, "HillTy01", 2025)
+        # 2024 contributes nothing at weight 0, so the blend is purely 2023.
+        assert result["target_share"] == pytest.approx(0.10)
+
+    def test_missing_weight_falls_back_and_is_counted(self, session, seed_players, seed_baselines):
+        b = session.get(PlayerSeasonBaseline, "HillTy01_2024")
+        b.data_trust_weight = None
+        session.commit()
+
+        stats = compute_all_baselines(session, 2025, verbose=False)
+        assert stats["missing_trust_weight"] >= 1
+
+
+class TestRecomputeBaselines:
+    def _blend_inputs(self, session):
+        """One prior season the blend can see, plus a target row to write into."""
+        b = session.get(PlayerSeasonBaseline, "HillTy01_2024")
+        b.data_trust_weight = 1.0
+        b.target_share = 0.20
+        session.commit()
+
+    def test_rerun_without_recompute_keeps_a_stale_blend(self, session, seed_players, seed_baselines):
+        # The trap: a blend computed before a lookback season's data landed
+        # survives a plain re-run, because no-overwrite skips the populated field.
+        self._blend_inputs(session)
+        compute_all_baselines(session, 2025, verbose=False)
+        assert session.get(PlayerSeasonBaseline, "HillTy01_2025").target_share == pytest.approx(0.20)
+
+        # A lookback season's value changes...
+        session.get(PlayerSeasonBaseline, "HillTy01_2024").target_share = 0.30
+        session.commit()
+
+        compute_all_baselines(session, 2025, verbose=False)
+        assert session.get(PlayerSeasonBaseline, "HillTy01_2025").target_share == pytest.approx(0.20)
+
+    def test_recompute_rebuilds_the_blend(self, session, seed_players, seed_baselines):
+        self._blend_inputs(session)
+        compute_all_baselines(session, 2025, verbose=False)
+        session.get(PlayerSeasonBaseline, "HillTy01_2024").target_share = 0.30
+        session.commit()
+
+        compute_all_baselines(session, 2025, verbose=False, recompute=True)
+        assert session.get(PlayerSeasonBaseline, "HillTy01_2025").target_share == pytest.approx(0.30)
+
+    def test_recompute_rebuilds_derived_composites(self, session, seed_players, seed_baselines):
+        # wopr derives from the shares, so it goes stale with them.
+        b = session.get(PlayerSeasonBaseline, "HillTy01_2024")
+        b.data_trust_weight = 1.0
+        b.target_share, b.air_yards_share = 0.20, 0.10
+        session.commit()
+        compute_all_baselines(session, 2025, verbose=False)
+        first = session.get(PlayerSeasonBaseline, "HillTy01_2025").wopr
+
+        b.target_share = 0.40
+        session.commit()
+        compute_all_baselines(session, 2025, verbose=False, recompute=True)
+        rebuilt = session.get(PlayerSeasonBaseline, "HillTy01_2025").wopr
+        assert rebuilt != pytest.approx(first)
+        assert rebuilt == pytest.approx(1.5 * 0.40 + 0.7 * 0.10)
+
+    def test_recompute_leaves_non_aggregable_fields_alone(self, session, seed_players, seed_baselines):
+        # Rankings/ADP are not the blend's to clear.
+        self._blend_inputs(session)
+        compute_all_baselines(session, 2025, verbose=False)
+        target = session.get(PlayerSeasonBaseline, "HillTy01_2025")
+        target.adp_consensus = 12.0
+        session.commit()
+
+        compute_all_baselines(session, 2025, verbose=False, recompute=True)
+        assert session.get(PlayerSeasonBaseline, "HillTy01_2025").adp_consensus == 12.0
 
 
 class TestComputeRouteOverlap:

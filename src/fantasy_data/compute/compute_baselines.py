@@ -57,6 +57,15 @@ AGGREGABLE_FIELDS = [
     "consistency_score",
 ]
 
+# Composites derived from the aggregable fields below — they go stale if the
+# fields they come from are rebuilt, so a recompute has to clear them too.
+DERIVED_FIELDS = ["wopr", "market_share_score"]
+
+# Weight assumed for a lookback season with no computed trust weight. Substituting
+# it silently is how 796 of 1012 missing 2026 weights went unnoticed — run
+# `compute trust-weights` for the lookback seasons rather than relying on this.
+MISSING_TRUST_WEIGHT = 0.5
+
 
 def compute_weighted_baseline(
     session: Session,
@@ -93,7 +102,12 @@ def compute_weighted_baseline(
         weights = []
         for b in baselines:
             val = getattr(b, field, None)
-            w = b.data_trust_weight or 0.5
+            # Explicit None check, not `or`: a legitimate weight of 0.0 is
+            # falsy and would silently become 0.5 — a 10x difference on a
+            # field that multiplies through every blended value. The formula's
+            # 0.05 floor makes that unreachable today, which is exactly the
+            # kind of guarantee that quietly stops holding.
+            w = b.data_trust_weight if b.data_trust_weight is not None else MISSING_TRUST_WEIGHT
             if val is not None:
                 values.append(val)
                 weights.append(w)
@@ -113,14 +127,56 @@ def compute_all_baselines(
     target_season: int,
     lookback_seasons: int = 3,
     verbose: bool = True,
+    recompute: bool = False,
 ) -> dict[str, int]:
     """Compute weighted baselines for all players with historical data.
 
     Stores results as a new baseline record for the target season.
     Only populates the aggregable fields — does not overwrite existing
     rankings or PFF grade data.
+
+    Args:
+        recompute: Clear the aggregable fields for `target_season` first, so the
+            blend is rebuilt from scratch. Without this the no-overwrite rule
+            makes a second run a silent no-op, which is a trap: if a lookback
+            season gained data after the first run, the stale blend that
+            excluded it survives. That happened twice during the 2026 refresh —
+            once when PFF landed after the first compute (route_participation_
+            rate, yards_per_route_run) and once for five nflverse-fed fields.
+            Use it whenever a lookback season's data has changed.
     """
-    stats = {"computed": 0, "no_history": 0}
+    stats = {"computed": 0, "no_history": 0, "cleared": 0, "missing_trust_weight": 0}
+
+    # Surface missing weights rather than quietly blending on the fallback. The
+    # 2026 refresh ran trust-weights before baselines created most of the rows,
+    # so 796 of 1012 had no weight and nothing said so.
+    stats["missing_trust_weight"] = (
+        session.query(PlayerSeasonBaseline)
+        .filter(
+            PlayerSeasonBaseline.season < target_season,
+            PlayerSeasonBaseline.season >= target_season - lookback_seasons,
+            PlayerSeasonBaseline.data_trust_weight.is_(None),
+        )
+        .count()
+    )
+    if stats["missing_trust_weight"] and verbose:
+        print(
+            f"WARNING: {stats['missing_trust_weight']} rows in the "
+            f"{target_season - lookback_seasons}-{target_season - 1} lookback have no "
+            f"data_trust_weight; blending them at {MISSING_TRUST_WEIGHT}. "
+            f"Run `compute trust-weights` for those seasons first."
+        )
+
+    if recompute:
+        targets = session.query(PlayerSeasonBaseline).filter(PlayerSeasonBaseline.season == target_season).all()
+        for baseline in targets:
+            for field in (*AGGREGABLE_FIELDS, *DERIVED_FIELDS):
+                if getattr(baseline, field, None) is not None:
+                    setattr(baseline, field, None)
+                    stats["cleared"] += 1
+        session.flush()
+        if verbose:
+            print(f"Cleared {stats['cleared']} values across {len(targets)} {target_season} rows before recompute")
 
     # Get all unique player_ids that have data in lookback window
     player_ids = (

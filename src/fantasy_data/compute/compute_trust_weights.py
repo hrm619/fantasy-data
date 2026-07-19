@@ -114,6 +114,49 @@ def _find_starting_qb(session: Session, team: str, season: int) -> Player | None
     return result
 
 
+def compute_team_tenure(session: Session, season: int) -> dict[str, int]:
+    """Consecutive seasons each player has spent with their `season` team.
+
+    Caps `seasons_in_system`: a system can be a decade old, but a player who
+    arrived this year has been in it for one season. The previous formula capped
+    by `players.years_pro` instead, which is wrong twice over — it measures
+    league experience rather than time on the team (a 12-year veteran joining a
+    10-year-old system would score 10), and it is a single static value applied
+    to every season of a player's career. It was also never populated, so
+    `min(system_years, years_pro or 1)` returned 1 for every player in every
+    season since inception.
+
+    A player's team for a season is already recorded per row, so no new source
+    is needed. A gap or a team change ends the run.
+    """
+    rows = (
+        session.query(
+            PlayerSeasonBaseline.player_id,
+            PlayerSeasonBaseline.season,
+            PlayerSeasonBaseline.team,
+        )
+        .filter(PlayerSeasonBaseline.season <= season)
+        .all()
+    )
+
+    teams_by_player: dict[str, dict[int, str | None]] = {}
+    for player_id, row_season, team in rows:
+        teams_by_player.setdefault(player_id, {})[row_season] = team
+
+    tenure: dict[str, int] = {}
+    for player_id, seasons in teams_by_player.items():
+        current_team = seasons.get(season)
+        if not current_team:
+            continue  # unknown team — leave seasons_in_system NULL rather than guess
+        years, cursor = 0, season
+        while seasons.get(cursor) == current_team:
+            years += 1
+            cursor -= 1
+        tenure[player_id] = years
+
+    return tenure
+
+
 def compute_all_trust_weights(
     session: Session,
     season: int,
@@ -131,6 +174,7 @@ def compute_all_trust_weights(
     if verbose and qb_changes:
         print(f"  QB changes detected: {qb_changes} teams")
 
+    team_tenure = compute_team_tenure(session, season)
     baselines = session.query(PlayerSeasonBaseline).filter(PlayerSeasonBaseline.season == season).all()
 
     for baseline in baselines:
@@ -170,9 +214,12 @@ def compute_all_trust_weights(
         baseline.hc_continuity = hc_cont
         baseline.oc_continuity = oc_cont
 
-        # Compute seasons_in_system from OC tenure
-        if staff and staff.oc_year_with_team:
-            baseline.seasons_in_system = min(staff.oc_year_with_team, player.years_pro or 1)
+        # Seasons this player has spent in this offensive system: the system's
+        # own tenure, capped by how long the player has actually been on the team.
+        system_years = staff.system_year_with_team if staff else None
+        player_years = team_tenure.get(baseline.player_id)
+        if system_years and player_years:
+            baseline.seasons_in_system = min(system_years, player_years)
 
         # Set projection_uncertain_flag
         baseline.projection_uncertain_flag = 1 if weight < 0.7 else 0

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import pandas as pd
 from sqlalchemy.orm import Session
 
+from fantasy_data.ingest.ingest_pff_bulk import _normalize
 from fantasy_data.models import Player, PlayerSeasonBaseline
 from fantasy_data.standardize import standardize_player_name, standardize_team
 
@@ -24,7 +25,6 @@ BASELINE_GRADE_MAP = {
     "passing_grade": "pff_passing_grade",
     "route_grade": "route_grade_pff",
     # Stats from receiving/rushing/passing endpoints
-    "games": "games_played",
     "games_started": "games_started",
     "drop_rate": "drop_rate",
     "contested_catch_rate": "contested_target_rate",
@@ -146,7 +146,7 @@ def ingest_pff(
         for csv_col, model_field in BASELINE_GRADE_MAP.items():
             val = row.get(csv_col)
             if val is not None and pd.notna(val):
-                setattr(baseline, model_field, val)
+                setattr(baseline, model_field, _normalize(model_field, val))
 
         stats["enriched"] += 1
 

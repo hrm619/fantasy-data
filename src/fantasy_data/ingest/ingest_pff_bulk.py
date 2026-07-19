@@ -6,6 +6,13 @@ offense_blocking, and defense_summary CSVs for 2014-2025.
 Matches players by PFF ID first (fast), then name fallback.
 Creates Player records for unmatched PFF players as is_active=0.
 
+Deliberately does NOT write `games_played`: PFF's `player_game_count` includes
+the postseason (21 for a Super Bowl run), while `ingest_historical` writes
+regular-season games from combined_data. Both mapped to the same field, so
+whichever ingest ran first silently decided what the column meant — 2025 came
+out counting playoffs while every prior season didn't. `ingest_historical` is
+the single writer; leave it that way.
+
 Usage:
     fantasy-data ingest pff-bulk --dir data-dev/pff-grades --start-season 2014 --end-season 2025
 """
@@ -30,7 +37,6 @@ RECEIVING_MAP = {
     "yprr": "yards_per_route_run",
     "route_rate": "route_participation_rate",
     "yards_after_catch_per_reception": "yards_after_catch_per_rec",
-    "player_game_count": "games_played",
 }
 
 # --- Rushing CSV → baseline field mapping ---
@@ -39,14 +45,12 @@ RUSHING_MAP = {
     "grades_run_block": "pff_run_blocking_grade",
     "grades_pass_block": "pff_pass_block_grade",
     "grades_pass_route": "pff_receiving_grade",
-    "player_game_count": "games_played",
 }
 
 # --- Passing CSV → baseline field mapping ---
 PASSING_MAP = {
     "grades_pass": "pff_passing_grade",
     "grades_offense": "pff_offense_grade",
-    "player_game_count": "games_played",
 }
 
 # --- Blocking CSV → baseline field mapping ---
@@ -147,6 +151,20 @@ def _resolve_player(
     return None
 
 
+# PFF reports these as percentages (0-100) while the other source for the same
+# baseline field reports a proportion (0-1). Rescale on the way in so the column
+# means one thing regardless of which ingest happened to populate a given row —
+# `drop_rate` is also fed by nflverse's PFR `drop_percent`, which is 0-1.
+PERCENT_FIELDS = {"drop_rate"}
+
+
+def _normalize(baseline_field: str, value: float) -> float:
+    """Convert PFF percentages to the proportions the schema stores."""
+    if baseline_field in PERCENT_FIELDS:
+        return value / 100.0
+    return value
+
+
 def _set_baseline_fields(baseline: PlayerSeasonBaseline, row: pd.Series, field_map: dict):
     """Set baseline fields from CSV row, only if currently NULL."""
     for csv_col, baseline_field in field_map.items():
@@ -154,7 +172,7 @@ def _set_baseline_fields(baseline: PlayerSeasonBaseline, row: pd.Series, field_m
         if val is not None and pd.notna(val):
             if getattr(baseline, baseline_field, None) is None:
                 try:
-                    setattr(baseline, baseline_field, float(val))
+                    setattr(baseline, baseline_field, _normalize(baseline_field, float(val)))
                 except (ValueError, TypeError):
                     pass
 

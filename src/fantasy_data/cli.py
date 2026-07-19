@@ -41,6 +41,7 @@ def cmd_seed_coaching(file_path):
             entry["team"] = standardize_team(entry["team"])
             entry["head_coach"] = standardize_coach_name(entry.get("head_coach"))
             entry["offensive_coordinator"] = standardize_coach_name(entry.get("offensive_coordinator"))
+            entry["play_caller"] = standardize_coach_name(entry.get("play_caller"))
             entry["quarterbacks_coach"] = standardize_coach_name(entry.get("quarterbacks_coach"))
             staff_id = f"{entry['team']}_{entry['season']}"
             staff = session.get(CoachingStaff, staff_id)
@@ -124,7 +125,7 @@ def cmd_ingest_pff(file_path, season):
 @ingest_group.command("historical")
 @click.option("--file", "file_path", default=None, help="Path to combined_data.csv (defaults to pipeline's data dir).")
 @click.option("--start-season", default=2014, type=int)
-@click.option("--end-season", default=2024, type=int)
+@click.option("--end-season", default=2025, type=int)
 def cmd_ingest_historical(file_path, start_season, end_season):
     """Ingest historical box score stats from fantasy_data_pipeline combined_data.csv."""
     from fantasy_data.ingest.ingest_historical import run_historical_ingest
@@ -156,16 +157,22 @@ def cmd_ingest_pff_bulk(data_dir, start_season, end_season):
 
 @ingest_group.command("nflverse")
 @click.option("--start-season", default=2014, type=int)
-@click.option("--end-season", default=2024, type=int)
+@click.option("--end-season", default=2025, type=int)
 @click.option("--skip-pbp", is_flag=True, default=False, help="Skip play-by-play aggregation (faster, fewer fields).")
-def cmd_ingest_nflverse(start_season, end_season, skip_pbp):
+@click.option(
+    "--overwrite-seasonal",
+    is_flag=True,
+    default=False,
+    help="Overwrite target_share/air_yards_share/racr/dominator_rating/WOPR instead of only filling NULLs.",
+)
+def cmd_ingest_nflverse(start_season, end_season, skip_pbp, overwrite_seasonal):
     """Ingest advanced metrics from nflverse (target share, snaps, RZ splits, etc.)."""
     from fantasy_data.ingest.ingest_nflverse import ingest_nflverse
 
     seasons = list(range(start_season, end_season + 1))
     session = get_session()
     try:
-        stats = ingest_nflverse(session, seasons, skip_pbp=skip_pbp)
+        stats = ingest_nflverse(session, seasons, skip_pbp=skip_pbp, overwrite_seasonal=overwrite_seasonal)
         click.echo(f"Done: {stats}")
     finally:
         session.close()
@@ -228,6 +235,19 @@ def compute_group():
     pass
 
 
+@compute_group.command("coaching-continuity")
+@click.option("--season", required=True, type=int)
+def cmd_compute_coaching_continuity(season):
+    """Derive coaching_staff continuity flags for a season from the prior season's staff."""
+    from fantasy_data.compute.compute_coaching_continuity import compute_coaching_continuity
+
+    session = get_session()
+    try:
+        compute_coaching_continuity(session, season)
+    finally:
+        session.close()
+
+
 @compute_group.command("trust-weights")
 @click.option("--season", required=True, type=int)
 def cmd_compute_trust(season):
@@ -244,13 +264,20 @@ def cmd_compute_trust(season):
 @compute_group.command("baselines")
 @click.option("--season", required=True, type=int)
 @click.option("--lookback", default=3, type=int, help="Number of prior seasons to consider.")
-def cmd_compute_baselines(season, lookback):
+@click.option(
+    "--recompute",
+    is_flag=True,
+    default=False,
+    help="Clear the season's aggregable fields first and rebuild the blend. Without this a re-run "
+    "is a no-op, so a blend computed before a lookback season's data landed survives unchanged.",
+)
+def cmd_compute_baselines(season, lookback, recompute):
     """Compute trust-weighted multi-season baselines."""
     from fantasy_data.compute.compute_baselines import compute_all_baselines
 
     session = get_session()
     try:
-        compute_all_baselines(session, season, lookback)
+        compute_all_baselines(session, season, lookback, recompute=recompute)
     finally:
         session.close()
 
@@ -293,19 +320,33 @@ def report_group():
 @click.option("--season", required=True, type=int)
 @click.option("--position", default=None, help="Filter by position (QB, RB, WR, TE, all).")
 @click.option("--threshold", default=12, type=int, help="Minimum divergence to display.")
+@click.option(
+    "--min-sources",
+    default=None,
+    type=int,
+    help="Drop players backed by fewer than N ranking sources (default 3; 0 disables). "
+    "Few-source players diverge far from ADP on variance rather than disagreement.",
+)
 @click.option("--plot", is_flag=True, default=False, help="Save interactive HTML chart.")
 @click.option("--output-dir", default=".", show_default=True)
-def cmd_report_divergence(season, position, threshold, plot, output_dir):
+def cmd_report_divergence(season, position, threshold, min_sources, plot, output_dir):
     """Show players where sharp consensus disagrees with ADP."""
-    from fantasy_data.reports.adp_divergence import get_adp_divergence, print_adp_divergence
+    from fantasy_data.reports.adp_divergence import (
+        DEFAULT_MIN_SOURCES,
+        get_adp_divergence,
+        print_adp_divergence,
+    )
+
+    if min_sources is None:
+        min_sources = DEFAULT_MIN_SOURCES
 
     session = get_session()
     try:
-        print_adp_divergence(session, season, position, threshold)
+        print_adp_divergence(session, season, position, threshold, min_sources=min_sources)
         if plot:
             from fantasy_data.viz.adp_divergence import plot_adp_divergence
 
-            results = get_adp_divergence(session, season, position, threshold)
+            results = get_adp_divergence(session, season, position, threshold, min_sources=min_sources)
             pos_label = (position or "all").lower()
             fig = plot_adp_divergence(results, season, pos_label.upper())
             out_path = f"{output_dir}/adp_divergence_{season}_{pos_label}.html"
@@ -457,8 +498,8 @@ def cmd_rankings_status(season):
 
 @cli.command("build-history")
 @click.option("--start-season", default=2014, type=int)
-@click.option("--end-season", default=2024, type=int)
-@click.option("--target-season", default=2025, type=int)
+@click.option("--end-season", default=2025, type=int)
+@click.option("--target-season", default=2026, type=int)
 @click.option("--skip-pbp", is_flag=True, default=False, help="Skip play-by-play aggregation (faster).")
 @click.option("--lookback", default=3, type=int)
 def cmd_build_history(start_season, end_season, target_season, skip_pbp, lookback):

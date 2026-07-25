@@ -160,8 +160,8 @@ Phase 3: Draft Season (2026)
   fantasy-data ingest rankings --season 2026 --refresh  # fetch automated sources first, then consolidate
   fantasy-data ingest rankings --season 2026 --skip-source fpts   # a source that hasn't published yet
 
-  RUN FROM THE PIPELINE REPO. The pipeline resolves `data/rankings current/update/` and
-  `player_key_dict.json` relative to the CWD, so this fails from anywhere else.
+  Runs from any directory — the pipeline anchors its data dir and player_key_dict.json to
+  its own repo root (config.project_root()); set FANTASY_PIPELINE_HOME to point elsewhere.
 
   Every source is REQUIRED — one missing file aborts the whole ingest. Through much of the
   preseason that is the normal state: the FantasyPoints fetcher refuses to download while

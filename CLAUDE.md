@@ -158,6 +158,16 @@ Phase 2: Historical Data (2014-2025)
 Phase 3: Draft Season (2026)
   fantasy-data ingest rankings --season 2026            # consolidate files already in update/
   fantasy-data ingest rankings --season 2026 --refresh  # fetch automated sources first, then consolidate
+  fantasy-data ingest rankings --season 2026 --skip-source fpts   # a source that hasn't published yet
+
+  RUN FROM THE PIPELINE REPO. The pipeline resolves `data/rankings current/update/` and
+  `player_key_dict.json` relative to the CWD, so this fails from anywhere else.
+
+  Every source is REQUIRED — one missing file aborts the whole ingest. Through much of the
+  preseason that is the normal state: the FantasyPoints fetcher refuses to download while
+  the site still serves last season's board under this season's title, and Barrett publishes
+  late. Use --skip-source; note it changes what the consensus columns MEAN (they average
+  only the sources that remain).
 
 Phase 4: Compute — ingest a season's actuals BEFORE computing its baselines
   for year in $(seq 2014 2025); do fantasy-data compute trust-weights --season $year; done

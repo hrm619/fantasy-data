@@ -83,11 +83,22 @@ def ingest_group():
     default=False,
     help="With --refresh, re-auth expired paywalled sessions (pops a login window).",
 )
-def cmd_ingest_rankings(league_type, season, data_path, refresh, auto_login):
+@click.option(
+    "--skip-source",
+    "skip_sources",
+    multiple=True,
+    help="Consolidate without a source that hasn't landed (repeatable), e.g. --skip-source fpts. "
+    "Every source is otherwise required, so one missing file aborts the whole ingest.",
+)
+def cmd_ingest_rankings(league_type, season, data_path, refresh, auto_login, skip_sources):
     """Run rankings pipeline and ingest into player_season_baseline.
 
     With --refresh, the automated source fetchers run first to populate the
     pipeline's update folder, so consolidation reflects freshly fetched rankings.
+
+    Use --skip-source for a source that is unavailable — commonly `fpts` through the
+    preseason, while FantasyPoints is still serving last season's board and the fetcher
+    correctly refuses to save it under this season's name.
     """
     from fantasy_data.ingest.ingest_rankings import run_rankings_pipeline
 
@@ -100,6 +111,7 @@ def cmd_ingest_rankings(league_type, season, data_path, refresh, auto_login):
             data_path,
             refresh=refresh,
             auto_login=auto_login,
+            skip_sources=list(skip_sources),
         )
         click.echo(f"Done: {stats}")
     finally:

@@ -30,9 +30,16 @@ COLUMN_MAP = {
     "ADP": "adp_consensus",
     "POS ADP": "adp_positional_rank",
     "fp_POS RANK": "fp_positional_rank",
-    "ECR ADP Delta": "ecr_adp_delta",
-    "ECR Delta": "ecr_avg_rank_delta",
 }
+
+# NOT mapped: ecr_adp_delta / ecr_avg_rank_delta. The pipeline stopped emitting `ECR ADP
+# Delta` and `ECR Delta` when the ECR-branded columns were removed from the board —
+# FantasyPros' rank now rides as fp_RK / fp_POS RANK, and is deliberately kept out of the
+# consensus because it is an average of experts rather than an independent one.
+#
+# The model columns stay: 2025 rows still hold 182 values from earlier ingests. But this
+# ingest UPSERTS, so leaving the mapping in place wrote nothing while the pre-existing values
+# quietly kept looking current — a stale delta beside a freshly-updated rank.
 
 # Sharp source positional rank columns in the pipeline output
 SHARP_POS_COLUMNS = [
@@ -246,73 +253,36 @@ def refresh_sources(
 ) -> dict[str, list[str]]:
     """Fetch every automated redraft source into the pipeline's update folder.
 
-    Mirrors the pipeline's `ff-rankings refresh-all` workflow: runs the six
-    automated fetchers independently so one failure (e.g. an expired paywalled
-    session) is reported but does not stop the others. Hayden Winks (hw) has no
-    automated fetcher (no stable Underdog URL) and must be downloaded manually
-    into update/ — its absence is surfaced, not fetched.
+    Delegates to the pipeline's own `ff-rankings refresh-all` (fetch only) rather than
+    keeping a second copy of the fetcher list here. The copy that used to live in this
+    function had silently drifted out of date and was BROKEN: it still imported
+    `fetch_fantasypros_adp`, which was renamed when the ADP source moved from the
+    FantasyPros consensus to DraftSharks' Sleeper board, so `--refresh` raised ImportError
+    before fetching anything. It also predated the Hayden Winks Yahoo fetcher and still told
+    the user to download `tableDownload.csv` by hand.
 
-    Returns {"fetched": [labels], "failed": [labels]} so the caller can decide
-    whether to proceed to consolidation.
+    The pipeline owns which sources exist, what they are called, and which need a session.
+    Duplicating that here can only drift again.
+
+    Returns {"fetched": [labels], "failed": [labels]} so the caller can decide whether to
+    proceed to consolidation.
     """
-    import os
+    from fantasy_pipeline.cli.rankings import _refresh_all_command
 
-    from fantasy_pipeline.config import CURRENT_SEASON, DEFAULT_PATHS
-    from fantasy_pipeline.scraper.fetch_rankings import (
-        ensure_session,
-        fetch_draftsharks,
-        fetch_fantasypros_adp,
-        fetch_fantasypros_rankings,
-        fetch_fpts,
-        fetch_jj,
-        fetch_pff,
-    )
+    argv = ["--no-consolidate"]
+    if update_dir:
+        argv += ["--data-path", update_dir]
+    if season:
+        argv += ["--year", str(season)]
+    if auto_login:
+        argv.append("--auto-login")
+    if not verbose:
+        argv.append("--quiet")
 
-    update_dir = update_dir or DEFAULT_PATHS["update_dir"]
-    year = season or CURRENT_SEASON
-    os.makedirs(update_dir, exist_ok=True)
-
-    # (label, paywalled-session-key | None, thunk). Free sources have no session key.
-    fetchers = [
-        ("adp (FantasyPros ADP)", None, lambda: fetch_fantasypros_adp(update_dir, year=year)),
-        ("fp (FantasyPros rankings)", None, lambda: fetch_fantasypros_rankings(update_dir, year=year)),
-        ("ds (DraftSharks)", None, lambda: fetch_draftsharks(update_dir)),
-        ("pff (PFF)", "pff", lambda: fetch_pff(update_dir, year=year)),
-        ("fpts (FantasyPoints)", "fpts", lambda: fetch_fpts(update_dir, year=year)),
-        ("jj (JJ Zachariason)", "jj", lambda: fetch_jj(update_dir, year=year)),
-    ]
-
-    if verbose:
-        print(f"Refreshing {len(fetchers)} redraft sources into: {update_dir}")
-
-    fetched: list[str] = []
-    failed: list[str] = []
-    for label, source, thunk in fetchers:
-        if source and auto_login and not ensure_session(source):
-            failed.append(label)
-            if verbose:
-                print(f"   ✗ {label} — session invalid; login not completed")
-            continue
-        try:
-            thunk()
-            fetched.append(label)
-            if verbose:
-                print(f"   ✓ {label}")
-        except Exception as e:
-            failed.append(label)
-            if verbose:
-                detail = str(e).splitlines()[0] if str(e) else type(e).__name__
-                print(f"   ✗ {label} — {detail}")
-
-    if verbose:
-        print(f"Fetched {len(fetched)}/{len(fetchers)} sources.")
-        if not any(f.startswith("tableDownload") for f in os.listdir(update_dir)):
-            print(
-                "   Note: redraft also needs Hayden Winks (tableDownload.csv), which has "
-                "no automated fetcher — download it manually into update/ for full consensus."
-            )
-
-    return {"fetched": fetched, "failed": failed}
+    # refresh-all prints its own per-source ✅/❌ lines and returns non-zero if any fetcher
+    # failed. Consolidation is left to the caller, which re-runs the processor anyway.
+    rc = _refresh_all_command(argv)
+    return {"fetched": [], "failed": ["see refresh-all output above"] if rc else []}
 
 
 def run_rankings_pipeline(
@@ -323,6 +293,7 @@ def run_rankings_pipeline(
     verbose: bool = True,
     refresh: bool = False,
     auto_login: bool = False,
+    skip_sources: list[str] | None = None,
 ) -> dict[str, int]:
     """Run the full rankings pipeline: (optionally fetch) + process + ingest.
 
@@ -331,6 +302,16 @@ def run_rankings_pipeline(
     workflow), so the consolidation reflects freshly fetched rankings. Fetch
     failures are reported but do not abort consolidation — it runs on whatever
     sources landed. ``auto_login`` re-auths expired paywalled sessions.
+
+    ``skip_sources`` consolidates without a source that hasn't landed. Every source in the
+    pipeline's file_mapping is otherwise REQUIRED, so one missing file aborts the whole
+    ingest — and that is the normal state for much of the preseason: the FantasyPoints
+    fetcher refuses to download while the site is still serving last season's board under
+    this season's title, and Barrett publishes late. Without this, `ingest rankings` simply
+    cannot run for weeks at a time.
+
+    Note a skip changes what the consensus columns MEAN — they average only the sources that
+    remain — so the caller is warned rather than left to infer it from a thinner board.
     """
     from fantasy_pipeline import RankingsProcessor
 
@@ -340,7 +321,10 @@ def run_rankings_pipeline(
     if refresh:
         refresh_sources(update_dir=data_path, season=season, auto_login=auto_login, verbose=verbose)
 
-    proc = RankingsProcessor(league_type)
+    if skip_sources and verbose:
+        print(f"   ⚠️  Skipping source(s): {', '.join(skip_sources)} — consensus columns average the rest")
+
+    proc = RankingsProcessor(league_type, skip_sources=skip_sources or None)
     df = proc.process_rankings(
         data_path=data_path,
         verbose=verbose,

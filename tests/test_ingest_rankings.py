@@ -206,3 +206,88 @@ class TestIngestRankings:
         )
         ingest_rankings(session, df, 2025, verbose=False)
         assert session.get(Player, "Test01").team == "JAX"
+
+
+class TestEcrDeltasAreNotIngested:
+    """The pipeline stopped emitting `ECR ADP Delta` / `ECR Delta` when the ECR-branded
+    columns were removed from the board (FantasyPros' rank now rides as fp_RK).
+
+    The mapping had to go rather than stay harmlessly unmatched: this ingest UPSERTS, so a
+    board without those columns wrote nothing while the 2026 rows kept their July values —
+    a stale delta sitting beside a freshly-updated rank.
+    """
+
+    def test_columns_are_not_mapped(self):
+        from fantasy_data.ingest.ingest_rankings import COLUMN_MAP
+
+        assert "ECR ADP Delta" not in COLUMN_MAP
+        assert "ECR Delta" not in COLUMN_MAP
+        assert "ecr_adp_delta" not in COLUMN_MAP.values()
+        assert "ecr_avg_rank_delta" not in COLUMN_MAP.values()
+
+    def test_a_board_still_carrying_them_does_not_write_them(self, session):
+        # An older board (or a hand-built one) may still have the columns; they must be
+        # ignored rather than resurrected.
+        df = _make_rankings_df()
+        df["PLAYER ID"] = [f"Test{i:02d}" for i in range(len(df))]
+        df["ECR ADP Delta"] = 99.0
+        df["ECR Delta"] = 99.0
+
+        ingest_rankings(session, df, 2026, "redraft", False)
+        session.commit()
+
+        rows = session.query(PlayerSeasonBaseline).filter_by(season=2026).all()
+        assert rows
+        assert all(r.ecr_adp_delta is None for r in rows)
+        assert all(r.ecr_avg_rank_delta is None for r in rows)
+
+
+class TestSkipSourcesPassthrough:
+    """Every source in the pipeline's file_mapping is required, so one missing file aborts
+    the whole ingest — the normal state for much of the preseason while FantasyPoints is
+    still serving last season's board."""
+
+    def test_skip_sources_reaches_the_processor(self, monkeypatch, session):
+        import fantasy_pipeline
+
+        from fantasy_data.ingest.ingest_rankings import run_rankings_pipeline
+
+        seen = {}
+
+        class _FakeProcessor:
+            def __init__(self, league_type, skip_sources=None):
+                seen["league_type"] = league_type
+                seen["skip_sources"] = skip_sources
+
+            def process_rankings(self, **kwargs):
+                df = _make_rankings_df()
+                df["PLAYER ID"] = [f"Skip{i:02d}" for i in range(len(df))]
+                return df
+
+        monkeypatch.setattr(fantasy_pipeline, "RankingsProcessor", _FakeProcessor)
+        run_rankings_pipeline(session, 2026, "redraft", None, verbose=False, skip_sources=["fpts"])
+
+        assert seen["skip_sources"] == ["fpts"]
+
+    def test_no_skip_passes_none_not_empty_list(self, monkeypatch, session):
+        # RankingsProcessor validates skip_sources against its file_mapping; an empty list
+        # should mean "skip nothing", not an empty-but-present filter.
+        import fantasy_pipeline
+
+        from fantasy_data.ingest.ingest_rankings import run_rankings_pipeline
+
+        seen = {}
+
+        class _FakeProcessor:
+            def __init__(self, league_type, skip_sources=None):
+                seen["skip_sources"] = skip_sources
+
+            def process_rankings(self, **kwargs):
+                df = _make_rankings_df()
+                df["PLAYER ID"] = [f"NoSkip{i:02d}" for i in range(len(df))]
+                return df
+
+        monkeypatch.setattr(fantasy_pipeline, "RankingsProcessor", _FakeProcessor)
+        run_rankings_pipeline(session, 2026, "redraft", None, verbose=False, skip_sources=[])
+
+        assert seen["skip_sources"] is None

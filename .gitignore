@@ -16,3 +16,6 @@ build/
 data-dev/
 qualitative-dev/
 baseline-data/
+
+# Claude Code local settings (machine-specific); agent-memory IS tracked
+.claude/settings.local.json

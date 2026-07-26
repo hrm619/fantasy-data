@@ -227,6 +227,20 @@ def cmd_ingest_rp(data_dir, position):
         session.close()
 
 
+@ingest_group.command("rp-rb")
+@click.option("--dir", "data_dir", required=True, help="Directory with Reception Perception RB CSV exports.")
+def cmd_ingest_rp_rb(data_dir):
+    """Ingest Reception Perception RB run-concept charting."""
+    from fantasy_data.ingest.ingest_rp_rb import ingest_rp_rb
+
+    session = get_session()
+    try:
+        stats = ingest_rp_rb(session, data_dir)
+        click.echo(f"Done: {stats}")
+    finally:
+        session.close()
+
+
 @ingest_group.command("ngs")
 @click.option("--file", "file_path", required=True, help="Path to NGS CSV export.")
 @click.option("--season", required=True, type=int, help="NFL season year.")

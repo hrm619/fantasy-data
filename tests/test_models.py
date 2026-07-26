@@ -104,6 +104,7 @@ class TestAllTablesCreated:
             "player_season_baseline",
             "target_competition",
             "wr_reception_perception",
+            "rp_rb_season",
             "player_week",
             "qualitative_signals",
         }

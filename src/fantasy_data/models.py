@@ -400,6 +400,84 @@ class WrReceptionPerception(Base):
     )
 
 
+class RpRbSeason(Base):
+    """Reception Perception run-concept charting for running backs (Matt Harmon).
+
+    **Not a route-charting table.** RP charts RBs on how they run — scheme (gap vs zone), where
+    the run goes (inside/outside), what the defense showed (loaded box, unblocked defender) —
+    with a success rate paired to each attempt share. Only `broken_tackle_pct` loosely rhymes
+    with anything in `wr_reception_perception`, which is why this is a separate table rather
+    than a `position` column on that one: merging would leave ~30 columns meaningless for half
+    the rows.
+
+    Percentages are stored 0-100, as the source gives them. Column names keep RP's own
+    vocabulary (`success_pct`, `att_pct`) so a number can be checked against the site without
+    translation.
+    """
+
+    __tablename__ = "rp_rb_season"
+
+    rp_rb_id: Mapped[str] = mapped_column(String, primary_key=True)  # player_id + season
+    player_id: Mapped[str] = mapped_column(String, ForeignKey("players.player_id"), nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_prospect: Mapped[int | None] = mapped_column(Integer, default=0)
+    # NFL club for pros ('ATL'), the college for prospects ('Indiana') — read with is_prospect.
+    team: Mapped[str | None] = mapped_column(String)
+
+    # Overall success rate. Present only in the prospect export ('OVR SR'); the pro table has
+    # no equivalent column, so this is NULL for pros rather than derivable.
+    overall_success_pct: Mapped[float | None] = mapped_column(Float)
+
+    # Alignment: shotgun/pistol vs under center
+    gun_pistol_att_pct: Mapped[float | None] = mapped_column(Float)
+    gun_pistol_success_pct: Mapped[float | None] = mapped_column(Float)
+    under_center_att_pct: Mapped[float | None] = mapped_column(Float)
+    under_center_success_pct: Mapped[float | None] = mapped_column(Float)
+
+    # Blocking scheme: man/gap vs zone, each split inside/outside
+    man_gap_att_pct: Mapped[float | None] = mapped_column(Float)
+    man_gap_success_pct: Mapped[float | None] = mapped_column(Float)
+    outside_man_gap_pct: Mapped[float | None] = mapped_column(Float)
+    outside_man_gap_success_pct: Mapped[float | None] = mapped_column(Float)
+    inside_man_gap_pct: Mapped[float | None] = mapped_column(Float)
+    inside_man_gap_success_pct: Mapped[float | None] = mapped_column(Float)
+    zone_att_pct: Mapped[float | None] = mapped_column(Float)
+    zone_success_pct: Mapped[float | None] = mapped_column(Float)
+    outside_zone_pct: Mapped[float | None] = mapped_column(Float)
+    outside_zone_success_pct: Mapped[float | None] = mapped_column(Float)
+    inside_zone_pct: Mapped[float | None] = mapped_column(Float)
+    inside_zone_success_pct: Mapped[float | None] = mapped_column(Float)
+
+    # Run direction, independent of scheme
+    outside_att_pct: Mapped[float | None] = mapped_column(Float)
+    outside_success_pct: Mapped[float | None] = mapped_column(Float)
+    inside_att_pct: Mapped[float | None] = mapped_column(Float)
+    inside_success_pct: Mapped[float | None] = mapped_column(Float)
+
+    # What the defense presented
+    loaded_box_pct: Mapped[float | None] = mapped_column(Float)
+    loaded_box_success_pct: Mapped[float | None] = mapped_column(Float)
+    unblocked_def_pct: Mapped[float | None] = mapped_column(Float)
+    unblocked_def_success_pct: Mapped[float | None] = mapped_column(Float)
+
+    # Outcomes
+    broken_tackle_pct: Mapped[float | None] = mapped_column(Float)
+    explosive_play_pct: Mapped[float | None] = mapped_column(Float)
+    run_stuff_pct: Mapped[float | None] = mapped_column(Float)
+    pass_block_success_pct: Mapped[float | None] = mapped_column(Float)
+
+    source: Mapped[str | None] = mapped_column(String)  # 'csv-manual' | 'site'
+    profile_url: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[str | None] = mapped_column(String, default=_now_iso)
+    updated_at: Mapped[str | None] = mapped_column(String)
+
+    __table_args__ = (
+        Index("ix_rp_rb_player", "player_id"),
+        Index("ix_rp_rb_season", "season"),
+        UniqueConstraint("player_id", "season", name="uq_rp_rb_player_season"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Phase 2 & 3 Hooks (schema defined now, populated later)
 # ---------------------------------------------------------------------------

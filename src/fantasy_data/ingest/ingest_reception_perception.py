@@ -22,109 +22,19 @@ from pathlib import Path
 import pandas as pd
 from sqlalchemy.orm import Session
 
+from fantasy_data.ingest.rp_common import (
+    SOURCE_PRECEDENCE,
+    build_name_index,
+    clean_int,
+    clean_pct,
+    detect_source,
+    first_present,
+    match_player,
+    set_if_present,
+)
 from fantasy_data.ingest.rp_parse import classify_type, matches_position
 from fantasy_data.models import Player, WrReceptionPerception
 from fantasy_data.standardize import standardize_player_name
-
-# Precedence when the same player-season arrives from both schemes (highest wins).
-SOURCE_PRECEDENCE = {"csv-manual": 0, "site": 1}
-
-
-def _detect_source(filename: str) -> str:
-    """Which capture produced a file. `fetch_rp.py` names exports `<page-key>__<type>.csv`."""
-    return "site" if "__" in Path(filename).stem else "csv-manual"
-
-
-def _clean_pct(val) -> float | None:
-    """Convert string percentages like '86.1' or '86.1%' to float."""
-    if val is None or pd.isna(val):
-        return None
-    s = str(val).strip().rstrip("%")
-    try:
-        return float(s)
-    except ValueError:
-        return None
-
-
-def _clean_int(val) -> int | None:
-    """Convert a count cell to int, tolerating '1,234' and blank cells."""
-    if val is None or pd.isna(val):
-        return None
-    try:
-        return int(float(str(val).strip().replace(",", "")))
-    except ValueError:
-        return None
-
-
-def _set(rp, field: str, value) -> None:
-    """Assign a parsed value, treating only None as 'the source said nothing'.
-
-    The previous idiom was `rp.field = _clean_pct(...) or rp.field`, which discards a genuine
-    **0.0** because it is falsy — a charted zero silently became the old value, or NULL. Zero
-    is a real and common reading in this data (a receiver who broke no tackles, ran no screens,
-    faced no double coverage), so it has to survive.
-    """
-    if value is not None:
-        setattr(rp, field, value)
-
-
-def _first(row, *names):
-    """Return the first present, non-null cell among `names`.
-
-    RP renames columns between seasons — tackle-breaking counts are "Opportunities" in the 2024
-    export and "In Space Opportunities" in 2025. Reading only one name silently NULLs the other
-    season; that is exactly how `tackle_break_opportunities` ended up populated for 115 of 126
-    rows, missing precisely the 11 rows from 2025.
-    """
-    for name in names:
-        val = row.get(name)
-        if val is not None and not pd.isna(val):
-            return val
-    return None
-
-
-def _collapse(name: str) -> str:
-    """Reduce a name to letters and digits only.
-
-    `players.full_name` comes from the pipeline's key dict, which strips hyphens and periods
-    ("Jaxon SmithNjigba", "AmonRa St Brown"), while RP publishes them ("Jaxon Smith-Njigba",
-    "Amon-Ra St. Brown"). `standardize_player_name` preserves hyphens, so the two can never
-    match exactly — which silently dropped two of the most-charted WRs in the dataset.
-    """
-    return "".join(ch for ch in name.lower() if ch.isalnum())
-
-
-def _build_name_index(session: Session, position: str) -> tuple[dict[str, str], dict[str, str]]:
-    """Return (exact index, punctuation-insensitive fallback index).
-
-    Built once per ingest. The previous lookup ran two full table scans per *unmatched* name,
-    which is O(players x names) on a miss — and misses are the common case for prospects.
-
-    The fallback drops any key that collapses to more than one distinct player, so it can only
-    ever resolve an unambiguous punctuation difference. It never guesses between two people.
-    """
-    exact: dict[str, str] = {}
-    collapsed: dict[str, set[str]] = {}
-
-    players = session.query(Player).all()
-    for p in players:
-        exact.setdefault(standardize_player_name(p.full_name), p.player_id)
-        collapsed.setdefault(_collapse(p.full_name), set()).add(p.player_id)
-    for p in players:
-        if p.position == position:
-            exact[standardize_player_name(p.full_name)] = p.player_id
-
-    unambiguous = {key: next(iter(ids)) for key, ids in collapsed.items() if len(ids) == 1}
-    return exact, unambiguous
-
-
-def _match_player(name: str, index: dict[str, str], fallback: dict[str, str] | None = None) -> str | None:
-    """Match an RP player name to a pipeline player_id, exact first then punctuation-insensitive."""
-    clean = name.strip().rstrip("*")
-    hit = index.get(standardize_player_name(clean))
-    if hit is not None:
-        return hit
-    return (fallback or {}).get(_collapse(clean))
 
 
 def _load_csvs(data_dir: Path, data_type: str, position: str = "WR") -> pd.DataFrame:
@@ -155,7 +65,7 @@ def _load_csvs(data_dir: Path, data_type: str, position: str = "WR") -> pd.DataF
 
             name_lower = csv_file.stem.lower()
             df["_is_prospect"] = 1 if ("draft" in name_lower or "prospect" in name_lower) else 0
-            df["_source"] = _detect_source(csv_file.name)
+            df["_source"] = detect_source(csv_file.name)
             frames.append(df)
 
     if not frames:
@@ -205,7 +115,7 @@ def ingest_reception_perception(
         for name, df in frames.items():
             print(f"  {name}: {len(df)} rows")
 
-    name_index, name_fallback = _build_name_index(session, position)
+    name_index, name_fallback = build_name_index(session, position)
 
     # Every (player, season, is_prospect) seen across all seven types.
     all_players: set[tuple[str, int, int]] = set()
@@ -224,7 +134,7 @@ def ingest_reception_perception(
     unmatched: list[str] = []
 
     for player_name, season, is_prospect in sorted(all_players):
-        player_id = _match_player(player_name, name_index, name_fallback)
+        player_id = match_player(player_name, name_index, name_fallback)
         if not player_id:
             stats["unmatched"] += 1
             unmatched.append(f"{player_name} ({season})")
@@ -304,20 +214,20 @@ def _find_row(df: pd.DataFrame, name: str, season: int) -> pd.Series | None:
 def _merge_coverage(rp, row) -> None:
     if row is None:
         return
-    _set(rp, "routes_charted", _clean_int(row.get("Routes")))
-    _set(rp, "success_rate_man", _clean_pct(row.get("Success Rate vs. Man")))
-    _set(rp, "success_rate_zone", _clean_pct(row.get("Success Rate vs. Zone")))
-    _set(rp, "success_rate_press", _clean_pct(row.get("Success Rate vs. Press")))
-    _set(rp, "success_rate_double", _clean_pct(row.get("Success Rate vs. Double")))
-    _set(rp, "pct_man", _clean_pct(row.get("% Man")))
-    _set(rp, "pct_zone", _clean_pct(row.get("% Zone")))
-    _set(rp, "pct_press", _clean_pct(row.get("% Press")))
-    _set(rp, "pct_doubled", _clean_pct(row.get("% Doubled")))
+    set_if_present(rp, "routes_charted", clean_int(row.get("Routes")))
+    set_if_present(rp, "success_rate_man", clean_pct(row.get("Success Rate vs. Man")))
+    set_if_present(rp, "success_rate_zone", clean_pct(row.get("Success Rate vs. Zone")))
+    set_if_present(rp, "success_rate_press", clean_pct(row.get("Success Rate vs. Press")))
+    set_if_present(rp, "success_rate_double", clean_pct(row.get("Success Rate vs. Double")))
+    set_if_present(rp, "pct_man", clean_pct(row.get("% Man")))
+    set_if_present(rp, "pct_zone", clean_pct(row.get("% Zone")))
+    set_if_present(rp, "pct_press", clean_pct(row.get("% Press")))
+    set_if_present(rp, "pct_doubled", clean_pct(row.get("% Doubled")))
     # Sample sizes behind each rate.
-    _set(rp, "man_atts", _clean_int(row.get("man atts.")))
-    _set(rp, "zone_atts", _clean_int(row.get("zone atts.")))
-    _set(rp, "double_atts", _clean_int(row.get("dbl atts.")))
-    _set(rp, "press_atts", _clean_int(row.get("press atts.")))
+    set_if_present(rp, "man_atts", clean_int(row.get("man atts.")))
+    set_if_present(rp, "zone_atts", clean_int(row.get("zone atts.")))
+    set_if_present(rp, "double_atts", clean_int(row.get("dbl atts.")))
+    set_if_present(rp, "press_atts", clean_int(row.get("press atts.")))
 
 
 def _merge_route_pct(rp, row) -> None:
@@ -336,7 +246,7 @@ def _merge_route_pct(rp, row) -> None:
         ("pct_flat", "Flat"),
         ("pct_other", "Other"),
     ):
-        _set(rp, field, _clean_pct(row.get(column)))
+        set_if_present(rp, field, clean_pct(row.get(column)))
 
 
 def _merge_route_success(rp, row) -> None:
@@ -356,50 +266,54 @@ def _merge_route_success(rp, row) -> None:
         ("success_rate_flat", "Flat"),
         ("success_rate_other", "Other"),
     ):
-        _set(rp, field, _clean_pct(row.get(column)))
+        set_if_present(rp, field, clean_pct(row.get(column)))
 
 
 def _merge_alignment(rp, row) -> None:
     if row is None:
         return
-    _set(rp, "pct_outside", _clean_pct(row.get("Outside")))
-    _set(rp, "pct_slot", _clean_pct(row.get("Slot")))
-    _set(rp, "pct_backfield", _clean_pct(row.get("Backfield")))
-    _set(rp, "pct_inline", _clean_pct(row.get("Inline")))
-    _set(rp, "pct_lwr", _clean_pct(row.get("LWR")))
-    _set(rp, "pct_rwr", _clean_pct(row.get("RWR")))
-    _set(rp, "pct_behind_los", _clean_pct(row.get("Behind LOS")))
-    _set(rp, "pct_on_los", _clean_pct(row.get("On LOS")))
-    _set(rp, "snaps_charted", _clean_int(row.get("Snaps")))
+    set_if_present(rp, "pct_outside", clean_pct(row.get("Outside")))
+    set_if_present(rp, "pct_slot", clean_pct(row.get("Slot")))
+    set_if_present(rp, "pct_backfield", clean_pct(row.get("Backfield")))
+    set_if_present(rp, "pct_inline", clean_pct(row.get("Inline")))
+    set_if_present(rp, "pct_lwr", clean_pct(row.get("LWR")))
+    set_if_present(rp, "pct_rwr", clean_pct(row.get("RWR")))
+    set_if_present(rp, "pct_behind_los", clean_pct(row.get("Behind LOS")))
+    set_if_present(rp, "pct_on_los", clean_pct(row.get("On LOS")))
+    set_if_present(rp, "snaps_charted", clean_int(row.get("Snaps")))
 
 
 def _merge_target(rp, row) -> None:
     if row is None:
         return
-    _set(rp, "route_target_rate", _clean_pct(row.get("Route Target Rate")))
-    _set(rp, "route_catch_rate", _clean_pct(row.get("Route Catch Rate")))
-    _set(rp, "catch_rate_rp", _clean_pct(row.get("Catch Rate")))
-    _set(rp, "drop_rate_rp", _clean_pct(row.get("Drop Rate")))
-    _set(rp, "targets_rp", _clean_int(row.get("Targets")))
+    set_if_present(rp, "route_target_rate", clean_pct(row.get("Route Target Rate")))
+    set_if_present(rp, "route_catch_rate", clean_pct(row.get("Route Catch Rate")))
+    set_if_present(rp, "catch_rate_rp", clean_pct(row.get("Catch Rate")))
+    set_if_present(rp, "drop_rate_rp", clean_pct(row.get("Drop Rate")))
+    set_if_present(rp, "targets_rp", clean_int(row.get("Targets")))
     if rp.routes_charted is None:
-        _set(rp, "routes_charted", _clean_int(row.get("Total Routes")))
+        set_if_present(rp, "routes_charted", clean_int(row.get("Total Routes")))
 
 
 def _merge_contested(rp, row) -> None:
     if row is None:
         return
-    _set(rp, "contested_target_rate_rp", _clean_pct(row.get("Contested Target Rate")))
-    _set(rp, "contested_catch_rate_rp", _clean_pct(row.get("Contested Catch Rate")))
-    _set(rp, "contested_targets_rp", _clean_int(row.get("Contested targets")))
+    set_if_present(rp, "contested_target_rate_rp", clean_pct(row.get("Contested Target Rate")))
+    set_if_present(rp, "contested_catch_rate_rp", clean_pct(row.get("Contested Catch Rate")))
+    set_if_present(rp, "contested_targets_rp", clean_int(row.get("Contested targets")))
 
 
 def _merge_tackle(rp, row) -> None:
     if row is None:
         return
-    _set(rp, "tackle_break_opportunities", _clean_int(_first(row, "In Space Opportunities", "Opportunities")))
-    _set(rp, "first_contact_drop_pct", _clean_pct(row.get("1st Contact Drop")))
-    _set(rp, "one_broken_tackle_pct", _clean_pct(row.get("1 Broken Tackle")))
-    _set(rp, "two_plus_broken_tackle_pct", _clean_pct(row.get("2+ Broken Tackle")))
+    set_if_present(
+        rp, "tackle_break_opportunities", clean_int(first_present(row, "In Space Opportunities", "Opportunities"))
+    )
+    set_if_present(rp, "first_contact_drop_pct", clean_pct(row.get("1st Contact Drop")))
+    set_if_present(rp, "one_broken_tackle_pct", clean_pct(row.get("1 Broken Tackle")))
+    set_if_present(rp, "two_plus_broken_tackle_pct", clean_pct(row.get("2+ Broken Tackle")))
     # Two columns, not one: RP changed the denominator between seasons (see models.py).
-    _set(rp, "in_space_pct_of_routes", _clean_pct(row.get("% of Routes")))
-    _set(rp, "in_space_pct_of_catches", _clean_pct(_first(row, "% of Catches in space", "% of Catches")))
+    set_if_present(rp, "in_space_pct_of_routes", clean_pct(row.get("% of Routes")))
+    set_if_present(
+        rp, "in_space_pct_of_catches", clean_pct(first_present(row, "% of Catches in space", "% of Catches"))
+    )

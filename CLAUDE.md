@@ -71,6 +71,8 @@ src/fantasy_data/
 │   ├── ingest_pff_bulk.py             # PFF per-season CSVs → bulk grade ingest (2014-2025)
 │   ├── ingest_reception_perception.py # RP film-graded WR metrics (7 CSV types, 2 naming schemes)
 │   ├── rp_parse.py                    # RP filename -> data type/position (pure, no I/O)
+│   ├── rp_common.py                   # Shared RP helpers: cleaners, 0.0-safe set, name matching
+│   ├── ingest_rp_rb.py                # RP RB run-concept charting (gap/zone, box, run stuffs)
 │   ├── ingest_historical_adp.py       # Fantasy Football Calculator API → historical ADP
 │   ├── ingest_ngs.py                  # NGS CSV → baseline (legacy stub)
 │   └── id_resolver.py                 # nflverse gsis_id → pipeline PLAYER ID bridge
@@ -106,7 +108,8 @@ scripts/
 | `players` | Master identity — pipeline PLAYER ID is canonical PK | 2,344 players |
 | `coaching_staff` | HC/OC/play-caller/QB continuity by team+season | 416 records (32 × 13) |
 | `player_season_baseline` | Core table — 90+ fields: role signals, PFF grades, NGS tracking, FTN charting, rankings, ADP, fantasy output | 8,334 records (2014-2026) |
-| `wr_reception_perception` | Film-graded WR metrics from Reception Perception | 183 records (2023-2025) |
+| `wr_reception_perception` | Film-graded WR **route** metrics from Reception Perception | 183 records (2023-2025) |
+| `rp_rb_season` | Film-graded RB **run-concept** metrics from Reception Perception | 21 records (2024 pro, 2025 prospects) |
 | `target_competition` | Intra-team route tree competition (Phase 2) | Empty |
 | `player_week` | Weekly observation layer (Phase 2) | Empty |
 | `qualitative_signals` | Expert qualitative signals (Phase 3) | Empty |
@@ -125,7 +128,8 @@ scripts/
 | nflverse FTN charting | 2022-2025 | Play-action %, screen %, true drop rate, contested/catchable ball % |
 | PFF grades (API capture) | 2014-2025 | Route grade, rush grade, offense grade, pass block, receiving grade, YPRR |
 | PFF stats (API capture) | 2014-2025 | Contested catch rate, drop rate, route participation |
-| Reception Perception | 2023-2025 | Coverage success rates + attempt counts, route tree, alignment, contested catch, in-space tackle breaking |
+| Reception Perception (WR) | 2023-2025 | Coverage success rates + attempt counts, route tree, alignment, contested catch, in-space tackle breaking |
+| Reception Perception (RB) | 2024 (+2025 prospects) | Gap/zone scheme + success, inside/outside, loaded box, unblocked defender, broken tackles, run stuffs, pass-block |
 | Historical ADP (FFC API) | 2017-2024 | Pre-season ADP consensus |
 | Coaching staff (manual + script) | 2014-2025 | HC, OC, starting QB, continuity flags, system tags |
 
@@ -159,6 +163,7 @@ Phase 2: Historical Data (2014-2025)
   fantasy-data ingest historical-adp                                  # ADP 2017-2024 (FFC has no 2025)
   fantasy-data ingest rp --dir "data-dev/Reception Perception WR Deep Dive"   # hand-downloaded CSVs
   fantasy-data ingest rp --dir data-dev/rp-site/csv --position WR            # site exports (fetch_rp.py)
+  fantasy-data ingest rp-rb --dir data-dev/rp-site/csv                       # RB run-concept charting
 
   Capturing from receptionperception.com (needs `ff-rankings login rp` once, from the
   pipeline repo — Playwright lives in ITS 'headless' extra):
@@ -246,6 +251,7 @@ Or use `fantasy-data build-history` for an automated Phase 2-4 sequence.
 - `test_reports.py` — ADP divergence filtering, rankings breakdown, variance, trust flags
 - `test_standardize.py` — Team abbreviations, player names, coach names
 - `test_ingest_rp.py` — RP filename classification (both schemes), position isolation, source precedence, falsy-zero preservation, cross-season column renames, name-collapse matching
+- `test_ingest_rp_rb.py` — RB alias map (pro vs prospect spellings), zero preservation, WR-table isolation, and two coverage tests asserting no field maps to a nonexistent column and no real column goes unmapped
 - `test_rp_contract.py` — pins each RP data type's exact header, proves both naming schemes parse to identical rows, and (marked `integration`, auto-skipped without `data-dev/`) compares the real site exports against the hand-downloaded CSVs cell by cell
 - `test_viz.py` — NYT theme API (apply_theme, color_for_mode, annotate_point), all 7 chart modules return `go.Figure` (requires `--extra viz`)
 
@@ -279,6 +285,23 @@ This repo is part of the quant-edge platform. See `/Users/henrymarsh/Documents/q
   routes run, the other the success rate on them. The filename is the *only* discriminator, so a
   misclassification is undetectable downstream: the columns parse and the values are plausible
   percentages. `classify_type` raises rather than guessing when a name matches two types.
+- **RB charting is a different measurement from WR, in its own table**: `rp_rb_season` holds *run
+  concepts* — gap vs zone (each split inside/outside), shotgun vs under center, loaded box,
+  unblocked defender, broken tackles, explosive plays, run stuffs, pass-block success — each attempt
+  share paired with a success rate. Only `broken_tackle_pct` loosely rhymes with anything in
+  `wr_reception_perception`. An earlier draft of the plan proposed merging both into one table with a
+  `position` column; that was wrong and would have left ~30 columns meaningless for half the rows.
+- **RP renames every RB metric between its pro and prospect exports**: the NFL table says
+  `G/P Success%`, `Under Center Att%`, `Unblocked Def%`, `Pass Block Success%`; the prospect table
+  says `G/P SR`, `Under Center%`, `Unblocked%`, `Pass Block SR`. `COLUMN_ALIASES` in `ingest_rp_rb`
+  maps each field to every spelling, and two tests assert both directions — no field mapped only to a
+  name that doesn't exist, and no real column left unmapped. Note `U/C Succes%` is RP's own typo in
+  the pro export; map it, don't correct it. The prospect table also carries `OVR SR`, which the pro
+  table has no equivalent for — it is NULL for pros rather than derived.
+- **To verify an RB load, sum the attempt shares**: gun/pistol + under centre, man/gap + zone, and
+  inside + outside should each average ~100 per row, as should the man/gap and zone sub-splits taken
+  together. Three independent sums landing on 100 is what proves the columns went to the right
+  fields; a swapped mapping breaks at least one.
 - **RP CSVs must be scoped by position**: the loader used to glob `*.csv` and select on data type
   alone, so an `RB Route Percentage` export sharing a directory with WR files merged into the WR
   frame, keyed only on `(Player, Year)`. `_load_csvs` now takes a `position`, skips files declaring a

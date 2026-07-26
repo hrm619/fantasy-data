@@ -10,15 +10,17 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from fantasy_data.ingest.ingest_reception_perception import (
-    _clean_int,
-    _clean_pct,
-    _detect_source,
-    _first,
     _load_csvs,
     _merge_route_pct,
     _merge_tackle,
-    _set,
     ingest_reception_perception,
+)
+from fantasy_data.ingest.rp_common import (
+    clean_int as _clean_int,
+    clean_pct as _clean_pct,
+    detect_source as _detect_source,
+    first_present as _first,
+    set_if_present as _set,
 )
 from fantasy_data.ingest.rp_parse import (
     RPClassificationError,

@@ -28,6 +28,9 @@ uv sync --extra dev
 # Run tests (exclude viz unless plotly/scipy installed)
 uv run pytest tests/ -v --ignore=tests/test_viz.py
 
+# Contract tests against the real RP captures (skipped automatically without data-dev/)
+uv run pytest -m integration
+
 # Run viz tests (requires viz extra)
 uv sync --extra viz && uv run pytest tests/test_viz.py -v
 
@@ -236,6 +239,7 @@ Or use `fantasy-data build-history` for an automated Phase 2-4 sequence.
 - `test_reports.py` — ADP divergence filtering, rankings breakdown, variance, trust flags
 - `test_standardize.py` — Team abbreviations, player names, coach names
 - `test_ingest_rp.py` — RP filename classification (both schemes), position isolation, source precedence, falsy-zero preservation, cross-season column renames, name-collapse matching
+- `test_rp_contract.py` — pins each RP data type's exact header, proves both naming schemes parse to identical rows, and (marked `integration`, auto-skipped without `data-dev/`) compares the real site exports against the hand-downloaded CSVs cell by cell
 - `test_viz.py` — NYT theme API (apply_theme, color_for_mode, annotate_point), all 7 chart modules return `go.Figure` (requires `--extra viz`)
 
 ## Integration with quant-edge

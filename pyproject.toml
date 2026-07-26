@@ -58,6 +58,13 @@ fantasy-data = "fantasy_data.cli:cli"
 [project.urls]
 Repository = "https://github.com/henrymarsh/fantasy-data"
 
+[tool.pytest.ini_options]
+# `integration` tests read the gitignored data-dev/ captures and skip when absent, so a plain
+# `pytest` run stays hermetic. Run them explicitly with `-m integration`.
+markers = [
+    "integration: requires local data-dev/ captures (skipped when they are not present)",
+]
+
 [tool.ruff]
 line-length = 120
 target-version = "py313"

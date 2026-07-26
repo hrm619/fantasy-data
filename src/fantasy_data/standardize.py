@@ -201,6 +201,21 @@ def standardize_player_name(name: str) -> str:
     return name.lower()
 
 
+def collapse_player_name(name: str) -> str:
+    """Reduce a name to letters and digits only \u2014 a last-resort matching key.
+
+    `standardize_player_name` keeps hyphens and spaces, which is right for most matching but
+    fails against `players.full_name`, whose values come from the pipeline key dict with
+    punctuation already stripped: "Jaxon SmithNjigba", "AmonRa St Brown". A source publishing
+    the real spelling ("Jaxon Smith-Njigba", "Amon-Ra St. Brown") then matches nothing.
+
+    Collapsing is deliberately aggressive, so it is only safe where a caller can verify the key
+    resolves to exactly ONE player \u2014 two different people can collapse to the same string.
+    Every caller here does that check; do not use it as a primary lookup.
+    """
+    return "".join(ch for ch in name.lower() if ch.isalnum())
+
+
 # -- Coach name standardization -----------------------------------------------
 
 

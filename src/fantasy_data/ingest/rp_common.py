@@ -14,7 +14,7 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from fantasy_data.models import Player
-from fantasy_data.standardize import standardize_player_name
+from fantasy_data.standardize import collapse_player_name as collapse_name, standardize_player_name
 
 # Precedence when the same player-season arrives from both capture schemes (highest wins).
 # The site table is live; a hand-downloaded CSV is a point-in-time copy of it.
@@ -77,17 +77,6 @@ def first_present(row, *names):
         if val is not None and not pd.isna(val):
             return val
     return None
-
-
-def collapse_name(name: str) -> str:
-    """Reduce a name to letters and digits only.
-
-    `players.full_name` comes from the pipeline's key dict, which strips hyphens and periods
-    ("Jaxon SmithNjigba", "AmonRa St Brown"), while RP publishes them ("Jaxon Smith-Njigba",
-    "Amon-Ra St. Brown"). `standardize_player_name` preserves hyphens, so the two can never
-    match exactly — which silently dropped two of the most-charted WRs in the dataset.
-    """
-    return "".join(ch for ch in name.lower() if ch.isalnum())
 
 
 # RP publishes the name a broadcast uses; the pipeline key dict stores the roster name. Only

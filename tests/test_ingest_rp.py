@@ -337,3 +337,46 @@ class TestProfileSlugSeason:
     )
     def test_unparseable_slug_returns_none_rather_than_guessing(self, slug):
         assert season_from_slug(slug) is None
+
+
+class TestCrossPositionGuard:
+    """A name that resolves to a player at another position must not be written.
+
+    RP charted Clemson WR prospect Antonio Williams, who is absent from `players`; the name
+    resolved to an NFL running back and 47 WR route-charting columns landed on his player_id.
+    Position *preference* cannot help — it only re-ranks candidates that exist.
+    """
+
+    def test_wr_charting_is_not_written_to_a_running_back(self, session, tmp_path):
+        session.add(Player(player_id="WillAn03", full_name="Antonio Williams", position="RB"))
+        session.commit()
+        (tmp_path / "wr-2025__target.csv").write_text("Year,Player,Catch Rate\n2025,Antonio Williams,70.0\n")
+
+        stats = ingest_reception_perception(session, str(tmp_path), verbose=False)
+
+        assert stats["records"] == 0
+        assert stats["position_mismatch"] == 1
+        assert session.query(WrReceptionPerception).count() == 0
+
+    def test_a_same_position_match_still_writes(self, session, tmp_path):
+        session.add(Player(player_id="RealWr01", full_name="Real Receiver", position="WR"))
+        session.commit()
+        (tmp_path / "wr-2025__target.csv").write_text("Year,Player,Catch Rate\n2025,Real Receiver,70.0\n")
+
+        stats = ingest_reception_perception(session, str(tmp_path), verbose=False)
+
+        assert stats["records"] == 1 and stats["position_mismatch"] == 0
+
+
+class TestNicknameAlias:
+    def test_gabe_davis_resolves_to_gabriel_davis(self, session, tmp_path):
+        """RP publishes the broadcast name; players.full_name has the roster name. The 2023
+        cohort lost a 1,000-yard starter to this with only a log line."""
+        session.add(Player(player_id="DaviGa01", full_name="Gabriel Davis", position="WR"))
+        session.commit()
+        (tmp_path / "WR Target Data - 2023.csv").write_text("Year,Player,Catch Rate\n2023,Gabe Davis,58.0\n")
+
+        stats = ingest_reception_perception(session, str(tmp_path), verbose=False)
+
+        assert stats["records"] == 1 and stats["unmatched"] == 0
+        assert session.get(WrReceptionPerception, "DaviGa01_2023") is not None

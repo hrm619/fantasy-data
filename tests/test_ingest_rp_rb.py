@@ -151,3 +151,37 @@ class TestIsolationAndIdempotence:
         write(tmp_path, "rb-2024__x.csv", PRO_HEADER, PRO_ROW.replace("Bijan Robinson", "Nobody Here"))
         stats = ingest_rp_rb(session, str(tmp_path), verbose=False)
         assert stats["records"] == 0 and stats["unmatched"] == 1
+
+
+class TestDirectoryAndPositionGuards:
+    def test_wr_exports_in_the_directory_are_ignored(self, session, tmp_path):
+        """Pointing this at the WR export directory used to write 141 all-NULL RB rows keyed on
+        real WR player_ids — no error, no warning."""
+        write(tmp_path, "rb-2024__2024-25-nfl-rb-data.csv", PRO_HEADER, PRO_ROW)
+        (tmp_path / "WR Target Data 2024-25.csv").write_text("Year,Player,Catch Rate\n2024,Some Receiver,70.0\n")
+
+        stats = ingest_rp_rb(session, str(tmp_path), verbose=False)
+
+        assert stats["files"] == 1
+        assert stats["records"] == 1
+
+    def test_a_name_resolving_to_another_position_is_refused(self, session, tmp_path):
+        session.add(Player(player_id="WrGuy001", full_name="Wideout Person", position="WR"))
+        session.commit()
+        write(tmp_path, "rb-2024__x.csv", PRO_HEADER, PRO_ROW.replace("Bijan Robinson", "Wideout Person"))
+
+        stats = ingest_rp_rb(session, str(tmp_path), verbose=False)
+
+        assert stats["records"] == 0 and stats["position_mismatch"] == 1
+        assert session.query(RpRbSeason).count() == 0
+
+    def test_records_counts_player_seasons_not_csv_rows(self, session, tmp_path):
+        """The same player-season across two exports is one record, not two."""
+        write(tmp_path, "rb-2024__a.csv", PRO_HEADER, PRO_ROW)
+        write(tmp_path, "rb-2024__b.csv", PRO_HEADER, PRO_ROW)
+
+        stats = ingest_rp_rb(session, str(tmp_path), verbose=False)
+
+        assert stats["files"] == 2
+        assert stats["records"] == 1
+        assert session.query(RpRbSeason).count() == 1

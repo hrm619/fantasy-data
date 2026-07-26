@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from fantasy_data.ingest.rp_common import (
     SOURCE_PRECEDENCE,
     build_name_index,
+    player_positions,
     clean_int,
     clean_pct,
     detect_source,
@@ -98,7 +99,14 @@ def ingest_reception_perception(
     Merges 7 CSV types on (Player, Year) and creates one record per player-season.
     """
     data_path = Path(data_dir)
-    stats = {"records": 0, "unmatched": 0, "route_types_set": 0, "from_site": 0, "from_csv_manual": 0}
+    stats = {
+        "records": 0,
+        "unmatched": 0,
+        "position_mismatch": 0,
+        "route_types_set": 0,
+        "from_site": 0,
+        "from_csv_manual": 0,
+    }
     now_iso = datetime.now(timezone.utc).isoformat()
 
     frames = {
@@ -116,6 +124,7 @@ def ingest_reception_perception(
             print(f"  {name}: {len(df)} rows")
 
     name_index, name_fallback = build_name_index(session, position)
+    positions = player_positions(session)
 
     # Every (player, season, is_prospect) seen across all seven types.
     all_players: set[tuple[str, int, int]] = set()
@@ -138,6 +147,13 @@ def ingest_reception_perception(
         if not player_id:
             stats["unmatched"] += 1
             unmatched.append(f"{player_name} ({season})")
+            continue
+        # Refuse a cross-position name collision rather than attributing this charting to the
+        # wrong person (see rp_common.player_positions).
+        matched_position = positions.get(player_id, "")
+        if matched_position and matched_position != position.upper():
+            stats["position_mismatch"] += 1
+            unmatched.append(f"{player_name} ({season}) -> {player_id} is a {matched_position}, not {position.upper()}")
             continue
 
         rp_id = f"{player_id}_{season}"

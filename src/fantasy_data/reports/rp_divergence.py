@@ -35,15 +35,19 @@ def _weighted(pairs: list[tuple[float | None, float | None]]) -> float | None:
     """Attempt-weighted success rate: sum(share x rate) / sum(share).
 
     Each RP view pairs a usage share with the success rate on that usage, so weighting by the
-    player's own mix gives one number without pretending every split matters equally. Returns
-    None unless at least one complete pair is present — a partially-charted row should not be
-    ranked against fully-charted ones.
+    player's own mix gives one number without pretending every split matters equally.
+
+    **Every pair must be complete.** Skipping incomplete pairs and dividing by the weight that
+    remains silently rescales the result to the splits that happen to be present: a QB charted
+    only on short throws would score his short success rate (~80) and rank near the top of a
+    pool whose other members are averaged across all depths. No live row triggers it today, but
+    the failure is invisible when it comes, so require the whole mix or nothing.
     """
     num = 0.0
     den = 0.0
     for share, rate in pairs:
         if share is None or rate is None:
-            continue
+            return None
         num += share * rate
         den += share
     return num / den if den > 0 else None
@@ -189,8 +193,9 @@ def get_rp_divergence(
                     "sharp_rank": round(market[player_id], 1),
                     "market_pct": market_pct[player_id],
                     "gap": round(gap, 1),
-                    # FILM_HIGH: charted better than the board rates him.
-                    "direction": "FILM_HIGH" if gap > 0 else "FILM_LOW",
+                    # An exact tie is agreement, not a negative read. Only reachable with
+                    # --threshold 0, where four real 2026 rows sit at exactly 0.0.
+                    "direction": ("MATCH" if gap == 0 else "FILM_HIGH" if gap > 0 else "FILM_LOW"),
                     "sources": baseline.rankings_source_count,
                 }
             )
@@ -236,7 +241,8 @@ def format_rp_divergence(rows: list[dict], season: int) -> str:
         f"Film vs market divergence — {season} board\n"
         f"Film charted: {seasons_note} (Reception Perception, 8-game samples)\n\n"
         f"{table}\n\n"
-        "FILM_HIGH = charted better than the board rates him; FILM_LOW = the reverse.\n"
+        "FILM_HIGH = charted better than the board rates him; FILM_LOW = the reverse;\n"
+        "MATCH = film and market agree exactly.\n"
         "Percentiles are among CHARTED players only — RP charts a fraction of each position, so\n"
         "these are not percentiles of the draft pool. The film season is never the board season:\n"
         "RP publishes a season's charting the following year."

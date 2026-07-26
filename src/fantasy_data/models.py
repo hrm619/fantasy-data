@@ -340,6 +340,9 @@ class WrReceptionPerception(Base):
     # Alignment (% of snaps, 0-100)
     pct_outside: Mapped[float | None] = mapped_column(Float)
     pct_slot: Mapped[float | None] = mapped_column(Float)
+    # Reserved: no RP alignment export has published an `Inline` column, so this is 0/183
+    # populated. A four-way alignment sum returns NULL for every row — use the three-way
+    # (outside + slot + backfield), which closes to 100 on 182/182.
     pct_inline: Mapped[float | None] = mapped_column(Float)
     pct_backfield: Mapped[float | None] = mapped_column(Float)
     pct_lwr: Mapped[float | None] = mapped_column(Float)  # left/right split inside pct_outside
@@ -365,10 +368,13 @@ class WrReceptionPerception(Base):
     first_contact_drop_pct: Mapped[float | None] = mapped_column(Float)
     one_broken_tackle_pct: Mapped[float | None] = mapped_column(Float)
     two_plus_broken_tackle_pct: Mapped[float | None] = mapped_column(Float)
-    # RP renamed this column between seasons AND changed its denominator: 2024 exports carry
-    # "% of Routes", 2025 carries "% of Catches". They are different measurements of the same
-    # idea, so they get separate columns — folding both into one would put a definitional break
-    # mid-column, which is exactly how `drop_rate` ended up 100x apart across 2018.
+    # RP renamed this column AND changed its denominator: some exports carry "% of Routes",
+    # others "% of Catches". The split follows the EXPORT, not the season — within 2025 the pro
+    # table uses catches while the prospect table still uses routes — so never reach for one as
+    # a fallback for the other on a season slice. They are different measurements of the same
+    # idea, kept in separate columns because folding them would put a definitional break
+    # mid-column, exactly how `drop_rate` ended up 100x apart across 2018. Mutually exclusive
+    # per row: 183/183 rows have exactly one populated.
     in_space_pct_of_routes: Mapped[float | None] = mapped_column(Float)
     in_space_pct_of_catches: Mapped[float | None] = mapped_column(Float)
 
@@ -385,8 +391,10 @@ class WrReceptionPerception(Base):
     success_rate_flat: Mapped[float | None] = mapped_column(Float)
     success_rate_other: Mapped[float | None] = mapped_column(Float)
 
-    # Provenance: which capture wrote this row, and where the prose profile lives. `profile_url`
-    # is the join key to the knowledge-base corpus (`content_record.url`).
+    # Provenance: which capture wrote this row. `profile_url` is RESERVED and currently
+    # unpopulated (0/223 across all three RP tables) — it is intended as the join key to the
+    # knowledge-base corpus (`content_record.url`), but nothing writes it yet, so a join
+    # through it returns nothing. Match on player name + season against the corpus instead.
     source: Mapped[str | None] = mapped_column(String)  # 'csv-manual' | 'site'
     profile_url: Mapped[str | None] = mapped_column(String)
 

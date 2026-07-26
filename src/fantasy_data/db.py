@@ -69,6 +69,12 @@ def sync_schema(engine=None, db_path: str | None = None) -> dict[str, list[str]]
     is left exactly as it is, even if its type no longer matches the model. Anything beyond
     an additive column change still needs a hand-written migration.
 
+    **It emits the column TYPE only.** `nullable=False`, `unique=True` and ForeignKey on an
+    added column are silently dropped, so a database patched by this function can differ in
+    constraints from one built fresh by `create_all`. That is data-safe but not equivalent —
+    if a new column needs a constraint, write the migration by hand. None of the RP columns
+    added so far declare one.
+
     Returns {table_name: [added columns]} for the ones it actually added.
     """
     from sqlalchemy import inspect, text

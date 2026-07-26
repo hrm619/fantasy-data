@@ -59,8 +59,11 @@ class TestFilmScore:
         # 60% man at 80, 40% zone at 50 -> 68.0
         assert _weighted([(60.0, 80.0), (40.0, 50.0)]) == pytest.approx(68.0)
 
-    def test_incomplete_pairs_are_skipped(self):
-        assert _weighted([(60.0, None), (40.0, 50.0)]) == pytest.approx(50.0)
+    def test_an_incomplete_pair_voids_the_whole_score(self):
+        """Dropping a missing split and renormalising would rescale the score to whatever was
+        charted — a QB with only short throws would score his short SR and top the pool."""
+        assert _weighted([(60.0, None), (40.0, 50.0)]) is None
+        assert _weighted([(None, 80.0), (40.0, 50.0)]) is None
 
     def test_no_usable_pair_is_none_not_zero(self):
         assert _weighted([(None, None)]) is None

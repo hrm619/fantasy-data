@@ -22,12 +22,14 @@ from sqlalchemy.orm import Session
 
 from fantasy_data.ingest.rp_common import (
     build_name_index,
+    player_positions,
     clean_pct,
     detect_source,
     first_present,
     match_player,
     set_if_present,
 )
+from fantasy_data.ingest.rp_parse import matches_position
 from fantasy_data.models import RpQbSeason
 
 _SEASON_IN_FILENAME = re.compile(r"^qb-(\d{4})__")
@@ -139,9 +141,10 @@ def ingest_rp_qb(
     verbose: bool = True,
 ) -> dict[str, int]:
     """Load QB charting into `rp_qb_season`, merging the three exports on player."""
-    stats = {"records": 0, "unmatched": 0, "files": 0}
+    stats = {"records": 0, "unmatched": 0, "position_mismatch": 0, "files": 0}
     now_iso = datetime.now(timezone.utc).isoformat()
     name_index, name_fallback = build_name_index(session, "QB")
+    positions = player_positions(session)
     unmatched: list[str] = []
     touched: set[str] = set()
 
@@ -150,6 +153,10 @@ def ingest_rp_qb(
     search_dir = position_dir if position_dir.is_dir() else base
 
     for csv_path in sorted(search_dir.glob("*.csv")):
+        # Skip exports that declare another position — `--season` otherwise bypasses the
+        # accidental protection that season_for_file's filename check provides.
+        if not matches_position(csv_path.name, "QB"):
+            continue
         df = pd.read_csv(csv_path)
         if "Player" not in df.columns:
             continue
@@ -169,6 +176,11 @@ def ingest_rp_qb(
             if not player_id:
                 stats["unmatched"] += 1
                 unmatched.append(f"{name} ({file_season})")
+                continue
+            matched_position = positions.get(player_id, "")
+            if matched_position and matched_position != "QB":
+                stats["position_mismatch"] += 1
+                unmatched.append(f"{name} ({file_season}) -> {player_id} is a {matched_position}, not QB")
                 continue
 
             rp_qb_id = f"{player_id}_{file_season}"

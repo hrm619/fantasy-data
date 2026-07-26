@@ -90,6 +90,17 @@ def collapse_name(name: str) -> str:
     return "".join(ch for ch in name.lower() if ch.isalnum())
 
 
+# RP publishes the name a broadcast uses; the pipeline key dict stores the roster name. Only
+# add an entry when the two are the same person and the mismatch is a nickname rather than a
+# spelling variant `collapse_name` already handles. Each entry costs a lookup, not a heuristic.
+NICKNAME_ALIASES: dict[str, str] = {
+    # RP's 2023 WR exports say "Gabe Davis"; players.full_name is "Gabriel Davis" (DaviGa01).
+    # collapse_name gives gabedavis vs gabrieldavis, so nothing matched and a 1,000-yard
+    # starter was dropped from the 2023 cohort with only a log line.
+    "gabe davis": "gabriel davis",
+}
+
+
 def build_name_index(session: Session, position: str) -> tuple[dict[str, str], dict[str, str]]:
     """Return (exact index, punctuation-insensitive fallback index).
 
@@ -117,7 +128,26 @@ def build_name_index(session: Session, position: str) -> tuple[dict[str, str], d
 def match_player(name: str, index: dict[str, str], fallback: dict[str, str] | None = None) -> str | None:
     """Match an RP player name to a pipeline player_id: exact first, then punctuation-insensitive."""
     clean = name.strip().rstrip("*")
-    hit = index.get(standardize_player_name(clean))
+    normalized = standardize_player_name(clean)
+    hit = index.get(normalized)
     if hit is not None:
         return hit
+    aliased = NICKNAME_ALIASES.get(normalized)
+    if aliased is not None:
+        hit = index.get(aliased)
+        if hit is not None:
+            return hit
     return (fallback or {}).get(collapse_name(clean))
+
+
+def player_positions(session: Session) -> dict[str, str]:
+    """Map player_id -> position, for rejecting cross-position name collisions.
+
+    Name matching resolves against the whole `players` table, so when the charted player is
+    absent from it entirely a same-named player at another position wins. That is not
+    hypothetical: RP charted Clemson WR prospect *Antonio Williams*, who is not in `players`,
+    and the name resolved to an NFL running back — 47 WR route-charting columns landed on an
+    RB's `player_id`. Position preference cannot help here; it only re-ranks candidates that
+    exist. The callers use this to refuse the write and report it instead.
+    """
+    return {p.player_id: (p.position or "") for p in session.query(Player).all()}

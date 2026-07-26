@@ -19,12 +19,14 @@ from sqlalchemy.orm import Session
 
 from fantasy_data.ingest.rp_common import (
     build_name_index,
+    player_positions,
     clean_pct,
     detect_source,
     first_present,
     match_player,
     set_if_present,
 )
+from fantasy_data.ingest.rp_parse import matches_position
 from fantasy_data.models import RpRbSeason
 
 # field -> the column names RP has used for it, most recent first.
@@ -62,18 +64,27 @@ COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
 
 
 def _rb_csvs(data_dir: Path) -> list[Path]:
-    """Every RB export under `data_dir`, preferring a `RB/` subdirectory when present."""
+    """Every RB export under `data_dir`, preferring a `RB/` subdirectory when present.
+
+    Files that declare a different position are skipped. Without that guard, pointing this at
+    the WR export directory globbed all 35 WR files and wrote 141 all-NULL rows keyed on real
+    WR player_ids — no error, no warning, and they squat on `(player_id, season)`. The WR
+    ingest has always had this guard; RB and QB were missing it.
+    """
     position_dir = data_dir / "RB"
     search_dir = position_dir if position_dir.is_dir() else data_dir
-    return sorted(search_dir.glob("*.csv"))
+    return [p for p in sorted(search_dir.glob("*.csv")) if matches_position(p.name, "RB")]
 
 
 def ingest_rp_rb(session: Session, data_dir: str, verbose: bool = True) -> dict[str, int]:
     """Load RB run-concept charting into `rp_rb_season`, one row per player-season."""
-    stats = {"records": 0, "unmatched": 0, "files": 0}
+    stats = {"records": 0, "unmatched": 0, "position_mismatch": 0, "files": 0}
     now_iso = datetime.now(timezone.utc).isoformat()
     name_index, name_fallback = build_name_index(session, "RB")
+    positions = player_positions(session)
     unmatched: list[str] = []
+    # Count player-seasons, not CSV rows: a player appearing in two exports is one record.
+    touched: set[str] = set()
 
     for csv_path in _rb_csvs(Path(data_dir)):
         df = pd.read_csv(csv_path)
@@ -101,6 +112,11 @@ def ingest_rp_rb(session: Session, data_dir: str, verbose: bool = True) -> dict[
                 stats["unmatched"] += 1
                 unmatched.append(f"{name} ({season})")
                 continue
+            matched_position = positions.get(player_id, "")
+            if matched_position and matched_position != "RB":
+                stats["position_mismatch"] += 1
+                unmatched.append(f"{name} ({season}) -> {player_id} is a {matched_position}, not RB")
+                continue
 
             rp_rb_id = f"{player_id}_{season}"
             rb = session.get(RpRbSeason, rp_rb_id)
@@ -123,9 +139,10 @@ def ingest_rp_rb(session: Session, data_dir: str, verbose: bool = True) -> dict[
 
             rb.source = source
             rb.updated_at = now_iso
-            stats["records"] += 1
+            touched.add(rp_rb_id)
 
     session.commit()
+    stats["records"] = len(touched)
 
     if verbose:
         for name in unmatched:

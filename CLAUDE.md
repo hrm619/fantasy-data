@@ -160,6 +160,13 @@ Phase 2: Historical Data (2014-2025)
   fantasy-data ingest rp --dir "data-dev/Reception Perception WR Deep Dive"   # hand-downloaded CSVs
   fantasy-data ingest rp --dir data-dev/rp-site/csv --position WR            # site exports (fetch_rp.py)
 
+  Capturing from receptionperception.com (needs `ff-rankings login rp` once, from the
+  pipeline repo — Playwright lives in ITS 'headless' extra):
+    uv run python scripts/fetch_rp.py --all                  # data tables -> csv/ (browser)
+    uv run python scripts/fetch_rp.py --profiles             # profile prose -> html/ (no browser)
+  Profiles are corpus material, not DB rows: the run also writes `sources_rp.yaml`, which
+  knowledge-base's config splices in via `files_from:`.
+
 Phase 3: Draft Season (2026)
   fantasy-data ingest rankings --season 2026            # consolidate files already in update/
   fantasy-data ingest rankings --season 2026 --refresh  # fetch automated sources first, then consolidate

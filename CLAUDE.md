@@ -83,6 +83,7 @@ src/fantasy_data/
 │   └── compute_competition.py         # Route overlap scoring (Phase 2)
 ├── reports/
 │   ├── adp_divergence.py              # Players where sharp ≠ ADP
+│   ├── rp_divergence.py               # Players where RP film ≠ the draft board
 │   ├── rankings.py                    # Per-source breakdown for one player
 │   ├── rankings_variance.py           # Cross-source disagreement (high std dev)
 │   ├── player_profile.py              # Full player profile
@@ -196,6 +197,7 @@ Phase 4: Compute — ingest a season's actuals BEFORE computing its baselines
 
 Phase 5: Reports
   fantasy-data report adp-divergence --season 2026 --plot
+  fantasy-data report rp-divergence --season 2026            # film vs market
   fantasy-data report trust-flags --season 2026 --plot
 ```
 
@@ -257,6 +259,7 @@ Or use `fantasy-data build-history` for an automated Phase 2-4 sequence.
 - `test_ingest_rp.py` — RP filename classification (both schemes), position isolation, source precedence, falsy-zero preservation, cross-season column renames, name-collapse matching
 - `test_ingest_rp_rb.py` — RB alias map (pro vs prospect spellings), zero preservation, WR-table isolation, and two coverage tests asserting no field maps to a nonexistent column and no real column goes unmapped
 - `test_ingest_rp_qb.py` — season resolution (and refusal to guess), the transposed deep-middle headers in both directions, three-export merge, zero preservation, alias coverage
+- `test_rp_divergence.py` — percentile DIRECTION (a flipped percentile is silent), the usage-weighted film score per position, charted-vs-board season, threshold/min-sources filters
 - `test_rp_contract.py` — pins each RP data type's exact header, proves both naming schemes parse to identical rows, and (marked `integration`, auto-skipped without `data-dev/`) compares the real site exports against the hand-downloaded CSVs cell by cell
 - `test_viz.py` — NYT theme API (apply_theme, color_for_mode, annotate_point), all 7 chart modules return `go.Figure` (requires `--extra viz`)
 
@@ -290,6 +293,18 @@ This repo is part of the quant-edge platform. See `/Users/henrymarsh/Documents/q
   routes run, the other the success rate on them. The filename is the *only* discriminator, so a
   misclassification is undetectable downstream: the columns parse and the values are plausible
   percentages. `classify_type` raises rather than guessing when a name matches two types.
+- **`report rp-divergence` compares percentiles, and only among charted players**: film scores
+  (0-100 success rates) and positional ranks (1..N, best at 1) are not commensurable, so both sides
+  are converted to within-position percentiles first. RP charts a fraction of each position, so an
+  "80th percentile" is 80th *of the charted pool*, not of the draft pool — and the film season is
+  never the board season (WR is one year back, RB/QB two). Both caveats are printed with the table
+  rather than left to the reader.
+- **A flipped percentile is silent**: the first implementation inverted the higher-is-better
+  branch, putting the best-charted receiver (Puka Nacua, 80.5) in the 5th percentile while a 60.6
+  landed at the 99th. Every number still looked like a percentile and every row still read
+  plausibly; only checking a known-good player against the output caught it. `_percentile_ranks`
+  now sorts worst-first in both directions so one formula serves both, and the direction is pinned
+  by tests.
 - **RP ships two QB heat-map columns under each other's headers**: in the QB "Heat Map Data"
   export, the column labelled `M 20+ SR` holds the deep-middle *target share* and `MID 20+ %` holds
   the *success rate* — they are transposed at source. Mapping by header name puts a success rate

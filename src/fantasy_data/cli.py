@@ -370,6 +370,52 @@ def report_group():
     pass
 
 
+@report_group.command("rp-divergence")
+@click.option("--season", required=True, type=int, help="Board season being drafted for.")
+@click.option("--position", default=None, help="Filter by position (WR, RB, QB, all).")
+@click.option(
+    "--threshold",
+    default=None,
+    type=int,
+    help="Minimum percentile-point gap to display (default 20; 0 shows everything). RP charts "
+    "few players per position, so small gaps are mostly sampling noise.",
+)
+@click.option("--limit", default=50, show_default=True, type=int)
+@click.option(
+    "--min-sources",
+    default=None,
+    type=int,
+    help="Drop players backed by fewer than N ranking sources (default 3; 0 disables).",
+)
+def cmd_report_rp_divergence(season, position, threshold, limit, min_sources):
+    """Show where Reception Perception film disagrees with the draft board."""
+    from fantasy_data.reports.rp_divergence import (
+        DEFAULT_MIN_SOURCES,
+        DEFAULT_THRESHOLD,
+        format_rp_divergence,
+        get_rp_divergence,
+    )
+
+    if min_sources is None:
+        min_sources = DEFAULT_MIN_SOURCES
+    if threshold is None:
+        threshold = DEFAULT_THRESHOLD
+
+    session = get_session()
+    try:
+        rows = get_rp_divergence(
+            session,
+            season=season,
+            position=position,
+            threshold=threshold,
+            limit=limit,
+            min_sources=min_sources,
+        )
+        click.echo(format_rp_divergence(rows, season))
+    finally:
+        session.close()
+
+
 @report_group.command("adp-divergence")
 @click.option("--season", required=True, type=int)
 @click.option("--position", default=None, help="Filter by position (QB, RB, WR, TE, all).")

@@ -323,7 +323,9 @@ class TestProfileSlugSeason:
 
     def test_publication_date_is_not_the_season(self):
         """The 2025 Addison profile was published 2026-07-13; it is 2025 content."""
-        season, _ = season_from_slug("jordan-addison-2025-player-profile")
+        parsed = season_from_slug("jordan-addison-2025-player-profile")
+        assert parsed is not None
+        season, _ = parsed
         assert season == 2025
         assert season != season_for_date("2026-07-13")
 

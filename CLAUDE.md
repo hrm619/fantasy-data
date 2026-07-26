@@ -215,7 +215,9 @@ twice (see "Ordering traps" below).
 4. `compute baselines --season N+1 --lookback 3` — this CREATES most of season N+1's rows.
 5. `compute trust-weights` for N and N+1 — **after** step 4, because it only updates rows that
    already exist.
-6. Bump `DEFAULT_SEASON` in `quant-edge-mcp`'s `server.py` and the CLI's stale season defaults.
+6. Bump the CLI's stale season defaults. (`quant-edge-mcp`'s `DEFAULT_SEASON` no longer needs
+   this — it's derived from `MAX(season) WHERE rankings_source_count IS NOT NULL` at server
+   startup, so it picks up the new season automatically once step 4 lands.)
 
 **Ordering traps** (both hit during the 2026 refresh, both silent, both found only by auditing the
 blend against a hand-recomputed one):

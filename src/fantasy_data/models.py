@@ -478,6 +478,102 @@ class RpRbSeason(Base):
     )
 
 
+class RpQbSeason(Base):
+    """Reception Perception charting for quarterbacks (Matt Harmon).
+
+    A QB is not route-charted, so this shares no vocabulary with the WR or RB tables. RP charts
+    *where the ball goes and how often it succeeds*, across three views that join on player:
+
+      * coverage and depth — man/zone, short/intermediate/deep
+      * a field heat map   — left/middle/right x (behind-LOS-to-9, 10-19, 20+)
+      * the route thrown   — twelve route types
+
+    Every metric is a pair: a target **share** (`_tar_pct`) and a **success rate** (`_sr`).
+    Shares within a view sum to ~100; success rates do not.
+
+    **`season` comes from the source page, not the data.** Unlike the WR and RB exports, the QB
+    tables carry no `Year` column at all — the ingest requires a season and refuses to default
+    one, because a silently mislabelled season here is indistinguishable from correct data.
+    """
+
+    __tablename__ = "rp_qb_season"
+
+    rp_qb_id: Mapped[str] = mapped_column(String, primary_key=True)  # player_id + season
+    player_id: Mapped[str] = mapped_column(String, ForeignKey("players.player_id"), nullable=False)
+    season: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_prospect: Mapped[int | None] = mapped_column(Integer, default=0)
+
+    # --- Coverage and depth (the "Basic Stats" table) ---
+    man_tar_pct: Mapped[float | None] = mapped_column(Float)
+    man_sr: Mapped[float | None] = mapped_column(Float)
+    zone_tar_pct: Mapped[float | None] = mapped_column(Float)
+    zone_sr: Mapped[float | None] = mapped_column(Float)
+    short_tar_pct: Mapped[float | None] = mapped_column(Float)
+    short_sr: Mapped[float | None] = mapped_column(Float)
+    intermediate_tar_pct: Mapped[float | None] = mapped_column(Float)
+    intermediate_sr: Mapped[float | None] = mapped_column(Float)
+    deep_tar_pct: Mapped[float | None] = mapped_column(Float)
+    deep_sr: Mapped[float | None] = mapped_column(Float)
+
+    # --- Field heat map: third of the field x depth band ---
+    left_los9_tar_pct: Mapped[float | None] = mapped_column(Float)
+    left_los9_sr: Mapped[float | None] = mapped_column(Float)
+    mid_los9_tar_pct: Mapped[float | None] = mapped_column(Float)
+    mid_los9_sr: Mapped[float | None] = mapped_column(Float)
+    right_los9_tar_pct: Mapped[float | None] = mapped_column(Float)
+    right_los9_sr: Mapped[float | None] = mapped_column(Float)
+    left_10_19_tar_pct: Mapped[float | None] = mapped_column(Float)
+    left_10_19_sr: Mapped[float | None] = mapped_column(Float)
+    mid_10_19_tar_pct: Mapped[float | None] = mapped_column(Float)
+    mid_10_19_sr: Mapped[float | None] = mapped_column(Float)
+    right_10_19_tar_pct: Mapped[float | None] = mapped_column(Float)
+    right_10_19_sr: Mapped[float | None] = mapped_column(Float)
+    left_20plus_tar_pct: Mapped[float | None] = mapped_column(Float)
+    left_20plus_sr: Mapped[float | None] = mapped_column(Float)
+    # See INVERTED_HEADERS in ingest_rp_qb: RP ships these two under each other's names.
+    mid_20plus_tar_pct: Mapped[float | None] = mapped_column(Float)
+    mid_20plus_sr: Mapped[float | None] = mapped_column(Float)
+    right_20plus_tar_pct: Mapped[float | None] = mapped_column(Float)
+    right_20plus_sr: Mapped[float | None] = mapped_column(Float)
+
+    # --- Accuracy by route type ---
+    route_check_tar_pct: Mapped[float | None] = mapped_column(Float)
+    route_check_sr: Mapped[float | None] = mapped_column(Float)
+    route_flat_tar_pct: Mapped[float | None] = mapped_column(Float)
+    route_flat_sr: Mapped[float | None] = mapped_column(Float)
+    route_comeback_tar_pct: Mapped[float | None] = mapped_column(Float)
+    route_comeback_sr: Mapped[float | None] = mapped_column(Float)
+    route_out_tar_pct: Mapped[float | None] = mapped_column(Float)
+    route_out_sr: Mapped[float | None] = mapped_column(Float)
+    route_corner_tar_pct: Mapped[float | None] = mapped_column(Float)
+    route_corner_sr: Mapped[float | None] = mapped_column(Float)
+    route_nine_tar_pct: Mapped[float | None] = mapped_column(Float)
+    route_nine_sr: Mapped[float | None] = mapped_column(Float)
+    route_post_tar_pct: Mapped[float | None] = mapped_column(Float)
+    route_post_sr: Mapped[float | None] = mapped_column(Float)
+    route_dig_tar_pct: Mapped[float | None] = mapped_column(Float)
+    route_dig_sr: Mapped[float | None] = mapped_column(Float)
+    route_curl_tar_pct: Mapped[float | None] = mapped_column(Float)
+    route_curl_sr: Mapped[float | None] = mapped_column(Float)
+    route_slant_tar_pct: Mapped[float | None] = mapped_column(Float)
+    route_slant_sr: Mapped[float | None] = mapped_column(Float)
+    route_screen_tar_pct: Mapped[float | None] = mapped_column(Float)
+    route_screen_sr: Mapped[float | None] = mapped_column(Float)
+    route_other_tar_pct: Mapped[float | None] = mapped_column(Float)
+    route_other_sr: Mapped[float | None] = mapped_column(Float)
+
+    source: Mapped[str | None] = mapped_column(String)  # 'csv-manual' | 'site'
+    profile_url: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[str | None] = mapped_column(String, default=_now_iso)
+    updated_at: Mapped[str | None] = mapped_column(String)
+
+    __table_args__ = (
+        Index("ix_rp_qb_player", "player_id"),
+        Index("ix_rp_qb_season", "season"),
+        UniqueConstraint("player_id", "season", name="uq_rp_qb_player_season"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Phase 2 & 3 Hooks (schema defined now, populated later)
 # ---------------------------------------------------------------------------

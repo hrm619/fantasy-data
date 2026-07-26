@@ -241,6 +241,27 @@ def cmd_ingest_rp_rb(data_dir):
         session.close()
 
 
+@ingest_group.command("rp-qb")
+@click.option("--dir", "data_dir", required=True, help="Directory with Reception Perception QB CSV exports.")
+@click.option(
+    "--season",
+    type=int,
+    default=None,
+    help="NFL season these exports cover. The QB tables carry no Year column; without this the "
+    "season is read from a 'qb-<year>__' filename prefix, and the ingest fails rather than guessing.",
+)
+def cmd_ingest_rp_qb(data_dir, season):
+    """Ingest Reception Perception QB charting (coverage, field heat map, route accuracy)."""
+    from fantasy_data.ingest.ingest_rp_qb import ingest_rp_qb
+
+    session = get_session()
+    try:
+        stats = ingest_rp_qb(session, data_dir, season=season)
+        click.echo(f"Done: {stats}")
+    finally:
+        session.close()
+
+
 @ingest_group.command("ngs")
 @click.option("--file", "file_path", required=True, help="Path to NGS CSV export.")
 @click.option("--season", required=True, type=int, help="NFL season year.")

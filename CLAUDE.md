@@ -73,6 +73,7 @@ src/fantasy_data/
 │   ├── rp_parse.py                    # RP filename -> data type/position (pure, no I/O)
 │   ├── rp_common.py                   # Shared RP helpers: cleaners, 0.0-safe set, name matching
 │   ├── ingest_rp_rb.py                # RP RB run-concept charting (gap/zone, box, run stuffs)
+│   ├── ingest_rp_qb.py                # RP QB charting (coverage/depth, field heat map, routes)
 │   ├── ingest_historical_adp.py       # Fantasy Football Calculator API → historical ADP
 │   ├── ingest_ngs.py                  # NGS CSV → baseline (legacy stub)
 │   └── id_resolver.py                 # nflverse gsis_id → pipeline PLAYER ID bridge
@@ -110,6 +111,7 @@ scripts/
 | `player_season_baseline` | Core table — 90+ fields: role signals, PFF grades, NGS tracking, FTN charting, rankings, ADP, fantasy output | 8,334 records (2014-2026) |
 | `wr_reception_perception` | Film-graded WR **route** metrics from Reception Perception | 183 records (2023-2025) |
 | `rp_rb_season` | Film-graded RB **run-concept** metrics from Reception Perception | 21 records (2024 pro, 2025 prospects) |
+| `rp_qb_season` | Film-graded QB metrics: coverage/depth, field heat map, route accuracy | 19 records (2024) |
 | `target_competition` | Intra-team route tree competition (Phase 2) | Empty |
 | `player_week` | Weekly observation layer (Phase 2) | Empty |
 | `qualitative_signals` | Expert qualitative signals (Phase 3) | Empty |
@@ -130,6 +132,7 @@ scripts/
 | PFF stats (API capture) | 2014-2025 | Contested catch rate, drop rate, route participation |
 | Reception Perception (WR) | 2023-2025 | Coverage success rates + attempt counts, route tree, alignment, contested catch, in-space tackle breaking |
 | Reception Perception (RB) | 2024 (+2025 prospects) | Gap/zone scheme + success, inside/outside, loaded box, unblocked defender, broken tackles, run stuffs, pass-block |
+| Reception Perception (QB) | 2024 | Man/zone + short/inter/deep target share & success, 3x3 field heat map, 12 route types |
 | Historical ADP (FFC API) | 2017-2024 | Pre-season ADP consensus |
 | Coaching staff (manual + script) | 2014-2025 | HC, OC, starting QB, continuity flags, system tags |
 
@@ -164,6 +167,7 @@ Phase 2: Historical Data (2014-2025)
   fantasy-data ingest rp --dir "data-dev/Reception Perception WR Deep Dive"   # hand-downloaded CSVs
   fantasy-data ingest rp --dir data-dev/rp-site/csv --position WR            # site exports (fetch_rp.py)
   fantasy-data ingest rp-rb --dir data-dev/rp-site/csv                       # RB run-concept charting
+  fantasy-data ingest rp-qb --dir data-dev/rp-site/csv                       # QB charting (season from filename)
 
   Capturing from receptionperception.com (needs `ff-rankings login rp` once, from the
   pipeline repo — Playwright lives in ITS 'headless' extra):
@@ -252,6 +256,7 @@ Or use `fantasy-data build-history` for an automated Phase 2-4 sequence.
 - `test_standardize.py` — Team abbreviations, player names, coach names
 - `test_ingest_rp.py` — RP filename classification (both schemes), position isolation, source precedence, falsy-zero preservation, cross-season column renames, name-collapse matching
 - `test_ingest_rp_rb.py` — RB alias map (pro vs prospect spellings), zero preservation, WR-table isolation, and two coverage tests asserting no field maps to a nonexistent column and no real column goes unmapped
+- `test_ingest_rp_qb.py` — season resolution (and refusal to guess), the transposed deep-middle headers in both directions, three-export merge, zero preservation, alias coverage
 - `test_rp_contract.py` — pins each RP data type's exact header, proves both naming schemes parse to identical rows, and (marked `integration`, auto-skipped without `data-dev/`) compares the real site exports against the hand-downloaded CSVs cell by cell
 - `test_viz.py` — NYT theme API (apply_theme, color_for_mode, annotate_point), all 7 chart modules return `go.Figure` (requires `--extra viz`)
 
@@ -285,6 +290,24 @@ This repo is part of the quant-edge platform. See `/Users/henrymarsh/Documents/q
   routes run, the other the success rate on them. The filename is the *only* discriminator, so a
   misclassification is undetectable downstream: the columns parse and the values are plausible
   percentages. `classify_type` raises rather than guessing when a name matches two types.
+- **RP ships two QB heat-map columns under each other's headers**: in the QB "Heat Map Data"
+  export, the column labelled `M 20+ SR` holds the deep-middle *target share* and `MID 20+ %` holds
+  the *success rate* — they are transposed at source. Mapping by header name puts a success rate
+  into a share field for one of nine zones, which is plausible-looking and undetectable downstream.
+  Proof is the shares, which must sum to ~100 across the nine zones: read as labelled they average
+  **147** (up to 184) over the 19 charted QBs; with those two exchanged every QB lands between 99.4
+  and 100.5. `INVERTED_HEADERS` in `ingest_rp_qb` encodes the swap, and the ingest prints a
+  shares-sum check on every run so the next transposition surfaces as a number rather than a quiet
+  wrong value. Re-verify if RP ever fixes the export.
+- **The QB exports carry no `Year` column at all** (WR and RB both do). Season comes from the source
+  page — parsed from the site export's `qb-<year>__` filename prefix or passed as `--season` — and
+  `season_for_file` raises rather than defaulting. A silently mislabelled season here is
+  indistinguishable from correct data once stored.
+- **QB charting is three exports joined on player**: coverage/depth ("Basic Stats"), the field heat
+  map, and accuracy by route type. Their columns are disjoint, so the ingest applies every alias map
+  to every row rather than classifying files. Each view's target shares sum to ~100 independently
+  (coverage, depth, the nine heat-map zones, the twelve routes) — four cheap checks that together
+  prove the ~52 columns reached the right fields.
 - **RB charting is a different measurement from WR, in its own table**: `rp_rb_season` holds *run
   concepts* — gap vs zone (each split inside/outside), shotgun vs under center, loaded box,
   unblocked defender, broken tackles, explosive plays, run stuffs, pass-block success — each attempt

@@ -47,9 +47,51 @@ def get_session(db_path: str | None = None) -> Session:
 
 
 def init_db(db_path: str | None = None):
-    """Create all tables in the database."""
+    """Create all tables, then add any columns the models gained since the DB was built."""
     from fantasy_data.models import Base
 
     engine = get_engine(db_path)
     Base.metadata.create_all(engine)
+    sync_schema(engine)
     return engine
+
+
+def sync_schema(engine=None, db_path: str | None = None) -> dict[str, list[str]]:
+    """Add columns that exist on the ORM models but not yet in the live tables.
+
+    `create_all()` only creates missing *tables* — it will not touch a table that already
+    exists, so a new `Mapped[...]` attribute is invisible to an existing database and every
+    query against it fails with "no such column". The alternative is rebuilding, which for
+    this DB means re-running a twelve-season ingest.
+
+    Deliberately narrow: it only ever runs `ALTER TABLE ... ADD COLUMN`. It never drops,
+    renames, retypes, or reorders anything, so it cannot destroy data — a column that exists
+    is left exactly as it is, even if its type no longer matches the model. Anything beyond
+    an additive column change still needs a hand-written migration.
+
+    Returns {table_name: [added columns]} for the ones it actually added.
+    """
+    from sqlalchemy import inspect, text
+
+    from fantasy_data.models import Base
+
+    if engine is None:
+        engine = get_engine(db_path)
+
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    added: dict[str, list[str]] = {}
+
+    with engine.begin() as conn:
+        for table in Base.metadata.tables.values():
+            if table.name not in existing_tables:
+                continue  # create_all() just made it; it is already current
+            live_columns = {c["name"] for c in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in live_columns:
+                    continue
+                col_type = column.type.compile(engine.dialect)
+                conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN "{column.name}" {col_type}'))
+                added.setdefault(table.name, []).append(column.name)
+
+    return added

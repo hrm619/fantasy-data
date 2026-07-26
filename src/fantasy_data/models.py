@@ -316,6 +316,14 @@ class WrReceptionPerception(Base):
     pct_press: Mapped[float | None] = mapped_column(Float)
     pct_doubled: Mapped[float | None] = mapped_column(Float)
 
+    # Attempt counts behind each success rate. A 62.5% success rate vs double coverage on 24
+    # attempts is a different fact from the same rate on 200; without these the rates cannot
+    # be weighted or filtered by sample size.
+    man_atts: Mapped[int | None] = mapped_column(Integer)
+    zone_atts: Mapped[int | None] = mapped_column(Integer)
+    double_atts: Mapped[int | None] = mapped_column(Integer)
+    press_atts: Mapped[int | None] = mapped_column(Integer)
+
     # Route tree distribution (% of routes, 0-100)
     pct_screen: Mapped[float | None] = mapped_column(Float)
     pct_slant: Mapped[float | None] = mapped_column(Float)
@@ -327,28 +335,42 @@ class WrReceptionPerception(Base):
     pct_out: Mapped[float | None] = mapped_column(Float)
     pct_comeback: Mapped[float | None] = mapped_column(Float)
     pct_flat: Mapped[float | None] = mapped_column(Float)
+    pct_other: Mapped[float | None] = mapped_column(Float)
 
     # Alignment (% of snaps, 0-100)
     pct_outside: Mapped[float | None] = mapped_column(Float)
     pct_slot: Mapped[float | None] = mapped_column(Float)
     pct_inline: Mapped[float | None] = mapped_column(Float)
     pct_backfield: Mapped[float | None] = mapped_column(Float)
+    pct_lwr: Mapped[float | None] = mapped_column(Float)  # left/right split inside pct_outside
+    pct_rwr: Mapped[float | None] = mapped_column(Float)
+    pct_behind_los: Mapped[float | None] = mapped_column(Float)
+    pct_on_los: Mapped[float | None] = mapped_column(Float)
+    snaps_charted: Mapped[int | None] = mapped_column(Integer)
 
     # Target efficiency
     route_target_rate: Mapped[float | None] = mapped_column(Float)
     route_catch_rate: Mapped[float | None] = mapped_column(Float)
     catch_rate_rp: Mapped[float | None] = mapped_column(Float)
     drop_rate_rp: Mapped[float | None] = mapped_column(Float)
+    targets_rp: Mapped[int | None] = mapped_column(Integer)
 
     # Contested catch
     contested_target_rate_rp: Mapped[float | None] = mapped_column(Float)
     contested_catch_rate_rp: Mapped[float | None] = mapped_column(Float)
+    contested_targets_rp: Mapped[int | None] = mapped_column(Integer)
 
     # Tackle breaking / YAC
     tackle_break_opportunities: Mapped[int | None] = mapped_column(Integer)
     first_contact_drop_pct: Mapped[float | None] = mapped_column(Float)
     one_broken_tackle_pct: Mapped[float | None] = mapped_column(Float)
     two_plus_broken_tackle_pct: Mapped[float | None] = mapped_column(Float)
+    # RP renamed this column between seasons AND changed its denominator: 2024 exports carry
+    # "% of Routes", 2025 carries "% of Catches". They are different measurements of the same
+    # idea, so they get separate columns — folding both into one would put a definitional break
+    # mid-column, which is exactly how `drop_rate` ended up 100x apart across 2018.
+    in_space_pct_of_routes: Mapped[float | None] = mapped_column(Float)
+    in_space_pct_of_catches: Mapped[float | None] = mapped_column(Float)
 
     # Route-level success rates (best routes)
     success_rate_slant: Mapped[float | None] = mapped_column(Float)
@@ -359,8 +381,17 @@ class WrReceptionPerception(Base):
     success_rate_corner: Mapped[float | None] = mapped_column(Float)
     success_rate_out: Mapped[float | None] = mapped_column(Float)
     success_rate_screen: Mapped[float | None] = mapped_column(Float)
+    success_rate_comeback: Mapped[float | None] = mapped_column(Float)
+    success_rate_flat: Mapped[float | None] = mapped_column(Float)
+    success_rate_other: Mapped[float | None] = mapped_column(Float)
+
+    # Provenance: which capture wrote this row, and where the prose profile lives. `profile_url`
+    # is the join key to the knowledge-base corpus (`content_record.url`).
+    source: Mapped[str | None] = mapped_column(String)  # 'csv-manual' | 'site'
+    profile_url: Mapped[str | None] = mapped_column(String)
 
     created_at: Mapped[str | None] = mapped_column(String, default=_now_iso)
+    updated_at: Mapped[str | None] = mapped_column(String)
 
     __table_args__ = (
         Index("ix_rp_player", "player_id"),

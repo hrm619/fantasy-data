@@ -208,13 +208,20 @@ def cmd_ingest_historical_adp(start_season, end_season):
 
 @ingest_group.command("rp")
 @click.option("--dir", "data_dir", required=True, help="Directory with Reception Perception CSV files.")
-def cmd_ingest_rp(data_dir):
-    """Ingest Reception Perception WR film-graded metrics."""
+@click.option(
+    "--position",
+    default="WR",
+    show_default=True,
+    help="Position to ingest. Files declaring another position are skipped, and a "
+    "<DIR>/<POSITION>/ subdirectory is read when present (the layout scripts/fetch_rp.py writes).",
+)
+def cmd_ingest_rp(data_dir, position):
+    """Ingest Reception Perception film-graded metrics."""
     from fantasy_data.ingest.ingest_reception_perception import ingest_reception_perception
 
     session = get_session()
     try:
-        stats = ingest_reception_perception(session, data_dir)
+        stats = ingest_reception_perception(session, data_dir, position=position)
         click.echo(f"Done: {stats}")
     finally:
         session.close()

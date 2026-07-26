@@ -1,15 +1,19 @@
-"""Ingest Reception Perception WR film-graded metrics.
+"""Ingest Reception Perception film-graded metrics.
 
-Reads 7 CSV types per season from Matt Harmon's RP data exports,
-merges on player name + year, and stores in wr_reception_perception table.
+Reads 7 CSV types per season from Matt Harmon's RP exports, merges on player name + year,
+and stores in the wr_reception_perception table. Also auto-classifies Player.route_tree_type
+from alignment data.
 
-Also auto-classifies Player.route_tree_type from alignment data.
+Two naming schemes are accepted, and may sit side by side:
 
-CSV file naming conventions:
-  - Pro WRs: "WR {Type} - 2023.csv" or "WR {Type} 2024-25.csv"
-  - Draft prospects: "{Type} - 2025 Draft Prospects.csv"
+  - hand-downloaded:  "WR Success Rate vs. Coverage Table 2024-25.csv"
+  - site export:      "wr-2024__success-rate-vs-coverage.csv"  (scripts/fetch_rp.py)
 
-The Year field in each CSV maps to the NFL season.
+File classification lives in `rp_parse` — see that module for why getting it wrong is
+undetectable downstream. Where both schemes supply the same player-season, the site export
+wins: it is the live table, while a hand-downloaded CSV is a point-in-time copy of it.
+
+The Year column in each CSV maps to the NFL season.
 """
 
 from datetime import datetime, timezone
@@ -18,8 +22,17 @@ from pathlib import Path
 import pandas as pd
 from sqlalchemy.orm import Session
 
+from fantasy_data.ingest.rp_parse import classify_type, matches_position
 from fantasy_data.models import Player, WrReceptionPerception
 from fantasy_data.standardize import standardize_player_name
+
+# Precedence when the same player-season arrives from both schemes (highest wins).
+SOURCE_PRECEDENCE = {"csv-manual": 0, "site": 1}
+
+
+def _detect_source(filename: str) -> str:
+    """Which capture produced a file. `fetch_rp.py` names exports `<page-key>__<type>.csv`."""
+    return "site" if "__" in Path(filename).stem else "csv-manual"
 
 
 def _clean_pct(val) -> float | None:
@@ -33,114 +46,188 @@ def _clean_pct(val) -> float | None:
         return None
 
 
-def _match_player(session: Session, name: str, name_cache: dict[str, str]) -> str | None:
-    """Match RP player name to pipeline player_id."""
-    # Strip injury markers
-    clean = name.strip().rstrip("*")
-    norm = standardize_player_name(clean)
+def _clean_int(val) -> int | None:
+    """Convert a count cell to int, tolerating '1,234' and blank cells."""
+    if val is None or pd.isna(val):
+        return None
+    try:
+        return int(float(str(val).strip().replace(",", "")))
+    except ValueError:
+        return None
 
-    if norm in name_cache:
-        return name_cache[norm]
 
-    # Try DB lookup
-    for p in session.query(Player).filter(Player.position == "WR").all():
-        if standardize_player_name(p.full_name) == norm:
-            name_cache[norm] = p.player_id
-            return p.player_id
+def _set(rp, field: str, value) -> None:
+    """Assign a parsed value, treating only None as 'the source said nothing'.
 
-    # Broader search (TE, RB who play WR-like roles)
-    for p in session.query(Player).all():
-        if standardize_player_name(p.full_name) == norm:
-            name_cache[norm] = p.player_id
-            return p.player_id
+    The previous idiom was `rp.field = _clean_pct(...) or rp.field`, which discards a genuine
+    **0.0** because it is falsy — a charted zero silently became the old value, or NULL. Zero
+    is a real and common reading in this data (a receiver who broke no tackles, ran no screens,
+    faced no double coverage), so it has to survive.
+    """
+    if value is not None:
+        setattr(rp, field, value)
 
+
+def _first(row, *names):
+    """Return the first present, non-null cell among `names`.
+
+    RP renames columns between seasons — tackle-breaking counts are "Opportunities" in the 2024
+    export and "In Space Opportunities" in 2025. Reading only one name silently NULLs the other
+    season; that is exactly how `tackle_break_opportunities` ended up populated for 115 of 126
+    rows, missing precisely the 11 rows from 2025.
+    """
+    for name in names:
+        val = row.get(name)
+        if val is not None and not pd.isna(val):
+            return val
     return None
 
 
-def _load_csvs(data_dir: Path, data_type: str) -> pd.DataFrame:
-    """Load all CSVs of a given type across seasons, normalizing column order."""
+def _collapse(name: str) -> str:
+    """Reduce a name to letters and digits only.
+
+    `players.full_name` comes from the pipeline's key dict, which strips hyphens and periods
+    ("Jaxon SmithNjigba", "AmonRa St Brown"), while RP publishes them ("Jaxon Smith-Njigba",
+    "Amon-Ra St. Brown"). `standardize_player_name` preserves hyphens, so the two can never
+    match exactly — which silently dropped two of the most-charted WRs in the dataset.
+    """
+    return "".join(ch for ch in name.lower() if ch.isalnum())
+
+
+def _build_name_index(session: Session, position: str) -> tuple[dict[str, str], dict[str, str]]:
+    """Return (exact index, punctuation-insensitive fallback index).
+
+    Built once per ingest. The previous lookup ran two full table scans per *unmatched* name,
+    which is O(players x names) on a miss — and misses are the common case for prospects.
+
+    The fallback drops any key that collapses to more than one distinct player, so it can only
+    ever resolve an unambiguous punctuation difference. It never guesses between two people.
+    """
+    exact: dict[str, str] = {}
+    collapsed: dict[str, set[str]] = {}
+
+    players = session.query(Player).all()
+    for p in players:
+        exact.setdefault(standardize_player_name(p.full_name), p.player_id)
+        collapsed.setdefault(_collapse(p.full_name), set()).add(p.player_id)
+    for p in players:
+        if p.position == position:
+            exact[standardize_player_name(p.full_name)] = p.player_id
+
+    unambiguous = {key: next(iter(ids)) for key, ids in collapsed.items() if len(ids) == 1}
+    return exact, unambiguous
+
+
+def _match_player(name: str, index: dict[str, str], fallback: dict[str, str] | None = None) -> str | None:
+    """Match an RP player name to a pipeline player_id, exact first then punctuation-insensitive."""
+    clean = name.strip().rstrip("*")
+    hit = index.get(standardize_player_name(clean))
+    if hit is not None:
+        return hit
+    return (fallback or {}).get(_collapse(clean))
+
+
+def _load_csvs(data_dir: Path, data_type: str, position: str = "WR") -> pd.DataFrame:
+    """Load every CSV of one data type for one position, newest-source-wins.
+
+    Looks in `data_dir` and, if present, `data_dir/<POSITION>/` — the layout `fetch_rp.py`
+    writes. Files declaring a different position are skipped, so a mixed directory cannot
+    cross-contaminate (see `rp_parse.matches_position`).
+    """
+    search_dirs = [data_dir]
+    position_dir = data_dir / position.upper()
+    if position_dir.is_dir():
+        search_dirs.append(position_dir)
+
     frames = []
-    for csv_file in sorted(data_dir.glob("*.csv")):
-        name_lower = csv_file.stem.lower()
-        if data_type.lower() not in name_lower:
-            continue
+    for directory in search_dirs:
+        for csv_file in sorted(directory.glob("*.csv")):
+            if classify_type(csv_file.name) != data_type:
+                continue
+            if not matches_position(csv_file.name, position):
+                continue
 
-        df = pd.read_csv(csv_file)
+            df = pd.read_csv(csv_file)
+            if "Player" not in df.columns and "player" in df.columns:
+                df = df.rename(columns={"player": "Player"})
+            if "Year" not in df.columns and "year" in df.columns:
+                df = df.rename(columns={"year": "Year"})
 
-        # Normalize column order: ensure Player and Year are present
-        if "Player" not in df.columns and "player" in df.columns:
-            df = df.rename(columns={"player": "Player"})
-        if "Year" not in df.columns and "year" in df.columns:
-            df = df.rename(columns={"year": "Year"})
-
-        # Detect prospect files
-        is_prospect = "draft" in name_lower.lower() or "prospect" in name_lower.lower()
-        df["_is_prospect"] = 1 if is_prospect else 0
-
-        frames.append(df)
+            name_lower = csv_file.stem.lower()
+            df["_is_prospect"] = 1 if ("draft" in name_lower or "prospect" in name_lower) else 0
+            df["_source"] = _detect_source(csv_file.name)
+            frames.append(df)
 
     if not frames:
         return pd.DataFrame()
-    return pd.concat(frames, ignore_index=True)
+
+    combined = pd.concat(frames, ignore_index=True)
+    if "Player" not in combined.columns or "Year" not in combined.columns:
+        return combined
+
+    # One row per player-season: order by source precedence and keep the winner.
+    combined["_precedence"] = combined["_source"].map(SOURCE_PRECEDENCE).fillna(0)
+    combined["_key"] = combined["Player"].astype(str).map(lambda n: standardize_player_name(n.strip().rstrip("*")))
+    combined = (
+        combined.sort_values("_precedence", kind="stable")
+        .drop_duplicates(subset=["_key", "Year", "_is_prospect"], keep="last")
+        .drop(columns=["_precedence"])
+        .reset_index(drop=True)
+    )
+    return combined
 
 
 def ingest_reception_perception(
     session: Session,
     data_dir: str,
     verbose: bool = True,
+    position: str = "WR",
 ) -> dict[str, int]:
     """Ingest all RP CSV data from a directory into wr_reception_perception.
 
     Merges 7 CSV types on (Player, Year) and creates one record per player-season.
     """
     data_path = Path(data_dir)
-    stats = {"records": 0, "unmatched": 0, "route_types_set": 0}
+    stats = {"records": 0, "unmatched": 0, "route_types_set": 0, "from_site": 0, "from_csv_manual": 0}
     now_iso = datetime.now(timezone.utc).isoformat()
-    name_cache: dict[str, str] = {}
 
-    # Load all 7 data types
-    coverage_df = _load_csvs(data_path, "Coverage")
-    route_pct_df = _load_csvs(data_path, "Route Percentage")
-    route_success_df = _load_csvs(data_path, "Success Rate by Route")
-    alignment_df = _load_csvs(data_path, "Alignment")
-    target_df = _load_csvs(data_path, "Target Data")
-    contested_df = _load_csvs(data_path, "Contested Catch")
-    tackle_df = _load_csvs(data_path, "Tackle Breaking")
+    frames = {
+        "coverage": _load_csvs(data_path, "coverage", position),
+        "route_pct": _load_csvs(data_path, "route_pct", position),
+        "route_success": _load_csvs(data_path, "route_success", position),
+        "alignment": _load_csvs(data_path, "alignment", position),
+        "target": _load_csvs(data_path, "target", position),
+        "contested": _load_csvs(data_path, "contested", position),
+        "tackle": _load_csvs(data_path, "tackle", position),
+    }
 
     if verbose:
-        for name, df in [
-            ("Coverage", coverage_df),
-            ("Route%", route_pct_df),
-            ("RouteSuccess", route_success_df),
-            ("Alignment", alignment_df),
-            ("Target", target_df),
-            ("Contested", contested_df),
-            ("Tackle", tackle_df),
-        ]:
+        for name, df in frames.items():
             print(f"  {name}: {len(df)} rows")
 
-    # Build a set of all (player, year) pairs across all dataframes
-    all_players = set()
-    for df in [coverage_df, route_pct_df, alignment_df, target_df, contested_df, tackle_df]:
-        if df.empty:
+    name_index, name_fallback = _build_name_index(session, position)
+
+    # Every (player, season, is_prospect) seen across all seven types.
+    all_players: set[tuple[str, int, int]] = set()
+    for df in frames.values():
+        if df.empty or "Player" not in df.columns:
             continue
         for _, row in df.iterrows():
             player = str(row.get("Player", "")).strip().rstrip("*")
             year = row.get("Year")
-            is_prospect = row.get("_is_prospect", 0)
             if player and pd.notna(year):
-                all_players.add((player, int(year), int(is_prospect)))
+                all_players.add((player, int(year), int(row.get("_is_prospect", 0))))
 
     if verbose:
         print(f"  Unique player-seasons: {len(all_players)}")
 
-    # Process each player-season
+    unmatched: list[str] = []
+
     for player_name, season, is_prospect in sorted(all_players):
-        player_id = _match_player(session, player_name, name_cache)
+        player_id = _match_player(player_name, name_index, name_fallback)
         if not player_id:
             stats["unmatched"] += 1
-            if verbose:
-                print(f"    RP unmatched: {player_name} ({season})")
+            unmatched.append(f"{player_name} ({season})")
             continue
 
         rp_id = f"{player_id}_{season}"
@@ -156,27 +243,22 @@ def ingest_reception_perception(
             session.add(rp)
 
         clean_name = player_name.strip().rstrip("*")
+        rows = {key: _find_row(df, clean_name, season) for key, df in frames.items()}
 
-        # --- Coverage success rates ---
-        _merge_coverage(rp, coverage_df, clean_name, season)
+        _merge_coverage(rp, rows["coverage"])
+        _merge_route_pct(rp, rows["route_pct"])
+        _merge_route_success(rp, rows["route_success"])
+        _merge_alignment(rp, rows["alignment"])
+        _merge_target(rp, rows["target"])
+        _merge_contested(rp, rows["contested"])
+        _merge_tackle(rp, rows["tackle"])
 
-        # --- Route percentage ---
-        _merge_route_pct(rp, route_pct_df, clean_name, season)
-
-        # --- Route success rates ---
-        _merge_route_success(rp, route_success_df, clean_name, season)
-
-        # --- Alignment ---
-        _merge_alignment(rp, alignment_df, clean_name, season)
-
-        # --- Target data ---
-        _merge_target(rp, target_df, clean_name, season)
-
-        # --- Contested catch ---
-        _merge_contested(rp, contested_df, clean_name, season)
-
-        # --- Tackle breaking ---
-        _merge_tackle(rp, tackle_df, clean_name, season)
+        sources = sorted({str(r["_source"]) for r in rows.values() if r is not None and "_source" in r})
+        if sources:
+            rp.source = "+".join(sources)
+            for src in sources:
+                stats[f"from_{src.replace('-', '_')}"] = stats.get(f"from_{src.replace('-', '_')}", 0) + 1
+        rp.updated_at = now_iso
 
         # Auto-set route_tree_type on Player from alignment
         if not is_prospect and rp.pct_outside is not None:
@@ -195,6 +277,8 @@ def ingest_reception_perception(
     session.commit()
 
     if verbose:
+        for name in unmatched:
+            print(f"    RP unmatched: {name}")
         print(
             f"\nRP ingest: {stats['records']} records, "
             f"{stats['unmatched']} unmatched, "
@@ -206,101 +290,116 @@ def ingest_reception_perception(
 
 def _find_row(df: pd.DataFrame, name: str, season: int) -> pd.Series | None:
     """Find a player's row in a DF by name + year."""
-    if df.empty:
+    if df.empty or "Year" not in df.columns or "Player" not in df.columns:
         return None
+    target = standardize_player_name(name)
     mask = df["Year"].astype(int) == season
     for _, row in df[mask].iterrows():
         row_name = str(row.get("Player", "")).strip().rstrip("*")
-        if standardize_player_name(row_name) == standardize_player_name(name):
+        if standardize_player_name(row_name) == target:
             return row
     return None
 
 
-def _merge_coverage(rp, df, name, season):
-    row = _find_row(df, name, season)
+def _merge_coverage(rp, row) -> None:
     if row is None:
         return
-    rp.routes_charted = int(row["Routes"]) if pd.notna(row.get("Routes")) else rp.routes_charted
-    rp.success_rate_man = _clean_pct(row.get("Success Rate vs. Man")) or rp.success_rate_man
-    rp.success_rate_zone = _clean_pct(row.get("Success Rate vs. Zone")) or rp.success_rate_zone
-    rp.success_rate_press = _clean_pct(row.get("Success Rate vs. Press")) or rp.success_rate_press
-    rp.success_rate_double = _clean_pct(row.get("Success Rate vs. Double")) or rp.success_rate_double
-    rp.pct_man = _clean_pct(row.get("% Man")) or rp.pct_man
-    rp.pct_zone = _clean_pct(row.get("% Zone")) or rp.pct_zone
-    rp.pct_press = _clean_pct(row.get("% Press")) or rp.pct_press
-    rp.pct_doubled = _clean_pct(row.get("% Doubled")) or rp.pct_doubled
+    _set(rp, "routes_charted", _clean_int(row.get("Routes")))
+    _set(rp, "success_rate_man", _clean_pct(row.get("Success Rate vs. Man")))
+    _set(rp, "success_rate_zone", _clean_pct(row.get("Success Rate vs. Zone")))
+    _set(rp, "success_rate_press", _clean_pct(row.get("Success Rate vs. Press")))
+    _set(rp, "success_rate_double", _clean_pct(row.get("Success Rate vs. Double")))
+    _set(rp, "pct_man", _clean_pct(row.get("% Man")))
+    _set(rp, "pct_zone", _clean_pct(row.get("% Zone")))
+    _set(rp, "pct_press", _clean_pct(row.get("% Press")))
+    _set(rp, "pct_doubled", _clean_pct(row.get("% Doubled")))
+    # Sample sizes behind each rate.
+    _set(rp, "man_atts", _clean_int(row.get("man atts.")))
+    _set(rp, "zone_atts", _clean_int(row.get("zone atts.")))
+    _set(rp, "double_atts", _clean_int(row.get("dbl atts.")))
+    _set(rp, "press_atts", _clean_int(row.get("press atts.")))
 
 
-def _merge_route_pct(rp, df, name, season):
-    row = _find_row(df, name, season)
+def _merge_route_pct(rp, row) -> None:
     if row is None:
         return
-    rp.pct_screen = _clean_pct(row.get("Screen")) or rp.pct_screen
-    rp.pct_slant = _clean_pct(row.get("Slant")) or rp.pct_slant
-    rp.pct_curl = _clean_pct(row.get("Curl")) or rp.pct_curl
-    rp.pct_dig = _clean_pct(row.get("Dig")) or rp.pct_dig
-    rp.pct_post = _clean_pct(row.get("Post")) or rp.pct_post
-    rp.pct_nine = _clean_pct(row.get("Nine")) or rp.pct_nine
-    rp.pct_corner = _clean_pct(row.get("Corner")) or rp.pct_corner
-    rp.pct_out = _clean_pct(row.get("Out")) or rp.pct_out
-    rp.pct_comeback = _clean_pct(row.get("Comeback")) or rp.pct_comeback
-    rp.pct_flat = _clean_pct(row.get("Flat")) or rp.pct_flat
+    for field, column in (
+        ("pct_screen", "Screen"),
+        ("pct_slant", "Slant"),
+        ("pct_curl", "Curl"),
+        ("pct_dig", "Dig"),
+        ("pct_post", "Post"),
+        ("pct_nine", "Nine"),
+        ("pct_corner", "Corner"),
+        ("pct_out", "Out"),
+        ("pct_comeback", "Comeback"),
+        ("pct_flat", "Flat"),
+        ("pct_other", "Other"),
+    ):
+        _set(rp, field, _clean_pct(row.get(column)))
 
 
-def _merge_route_success(rp, df, name, season):
-    row = _find_row(df, name, season)
+def _merge_route_success(rp, row) -> None:
+    # Same column names as _merge_route_pct — the discriminator is the FILE, not the header.
     if row is None:
         return
-    rp.success_rate_slant = _clean_pct(row.get("Slant")) or rp.success_rate_slant
-    rp.success_rate_curl = _clean_pct(row.get("Curl")) or rp.success_rate_curl
-    rp.success_rate_dig = _clean_pct(row.get("Dig")) or rp.success_rate_dig
-    rp.success_rate_post = _clean_pct(row.get("Post")) or rp.success_rate_post
-    rp.success_rate_nine = _clean_pct(row.get("Nine")) or rp.success_rate_nine
-    rp.success_rate_corner = _clean_pct(row.get("Corner")) or rp.success_rate_corner
-    rp.success_rate_out = _clean_pct(row.get("Out")) or rp.success_rate_out
-    rp.success_rate_screen = _clean_pct(row.get("Screen")) or rp.success_rate_screen
+    for field, column in (
+        ("success_rate_screen", "Screen"),
+        ("success_rate_slant", "Slant"),
+        ("success_rate_curl", "Curl"),
+        ("success_rate_dig", "Dig"),
+        ("success_rate_post", "Post"),
+        ("success_rate_nine", "Nine"),
+        ("success_rate_corner", "Corner"),
+        ("success_rate_out", "Out"),
+        ("success_rate_comeback", "Comeback"),
+        ("success_rate_flat", "Flat"),
+        ("success_rate_other", "Other"),
+    ):
+        _set(rp, field, _clean_pct(row.get(column)))
 
 
-def _merge_alignment(rp, df, name, season):
-    row = _find_row(df, name, season)
+def _merge_alignment(rp, row) -> None:
     if row is None:
         return
-    rp.pct_outside = _clean_pct(row.get("Outside")) or rp.pct_outside
-    rp.pct_slot = _clean_pct(row.get("Slot")) or rp.pct_slot
-    rp.pct_backfield = _clean_pct(row.get("Backfield")) or rp.pct_backfield
-    # Inline not in WR data but check anyway
-    rp.pct_inline = _clean_pct(row.get("Inline")) or rp.pct_inline
+    _set(rp, "pct_outside", _clean_pct(row.get("Outside")))
+    _set(rp, "pct_slot", _clean_pct(row.get("Slot")))
+    _set(rp, "pct_backfield", _clean_pct(row.get("Backfield")))
+    _set(rp, "pct_inline", _clean_pct(row.get("Inline")))
+    _set(rp, "pct_lwr", _clean_pct(row.get("LWR")))
+    _set(rp, "pct_rwr", _clean_pct(row.get("RWR")))
+    _set(rp, "pct_behind_los", _clean_pct(row.get("Behind LOS")))
+    _set(rp, "pct_on_los", _clean_pct(row.get("On LOS")))
+    _set(rp, "snaps_charted", _clean_int(row.get("Snaps")))
 
 
-def _merge_target(rp, df, name, season):
-    row = _find_row(df, name, season)
+def _merge_target(rp, row) -> None:
     if row is None:
         return
-    rp.route_target_rate = _clean_pct(row.get("Route Target Rate")) or rp.route_target_rate
-    rp.route_catch_rate = _clean_pct(row.get("Route Catch Rate")) or rp.route_catch_rate
-    rp.catch_rate_rp = _clean_pct(row.get("Catch Rate")) or rp.catch_rate_rp
-    rp.drop_rate_rp = _clean_pct(row.get("Drop Rate")) or rp.drop_rate_rp
+    _set(rp, "route_target_rate", _clean_pct(row.get("Route Target Rate")))
+    _set(rp, "route_catch_rate", _clean_pct(row.get("Route Catch Rate")))
+    _set(rp, "catch_rate_rp", _clean_pct(row.get("Catch Rate")))
+    _set(rp, "drop_rate_rp", _clean_pct(row.get("Drop Rate")))
+    _set(rp, "targets_rp", _clean_int(row.get("Targets")))
+    if rp.routes_charted is None:
+        _set(rp, "routes_charted", _clean_int(row.get("Total Routes")))
 
-    routes = row.get("Total Routes")
-    if pd.notna(routes) and rp.routes_charted is None:
-        rp.routes_charted = int(routes)
 
-
-def _merge_contested(rp, df, name, season):
-    row = _find_row(df, name, season)
+def _merge_contested(rp, row) -> None:
     if row is None:
         return
-    rp.contested_target_rate_rp = _clean_pct(row.get("Contested Target Rate")) or rp.contested_target_rate_rp
-    rp.contested_catch_rate_rp = _clean_pct(row.get("Contested Catch Rate")) or rp.contested_catch_rate_rp
+    _set(rp, "contested_target_rate_rp", _clean_pct(row.get("Contested Target Rate")))
+    _set(rp, "contested_catch_rate_rp", _clean_pct(row.get("Contested Catch Rate")))
+    _set(rp, "contested_targets_rp", _clean_int(row.get("Contested targets")))
 
 
-def _merge_tackle(rp, df, name, season):
-    row = _find_row(df, name, season)
+def _merge_tackle(rp, row) -> None:
     if row is None:
         return
-    opps = row.get("Opportunities")
-    if pd.notna(opps):
-        rp.tackle_break_opportunities = int(opps)
-    rp.first_contact_drop_pct = _clean_pct(row.get("1st Contact Drop")) or rp.first_contact_drop_pct
-    rp.one_broken_tackle_pct = _clean_pct(row.get("1 Broken Tackle")) or rp.one_broken_tackle_pct
-    rp.two_plus_broken_tackle_pct = _clean_pct(row.get("2+ Broken Tackle")) or rp.two_plus_broken_tackle_pct
+    _set(rp, "tackle_break_opportunities", _clean_int(_first(row, "In Space Opportunities", "Opportunities")))
+    _set(rp, "first_contact_drop_pct", _clean_pct(row.get("1st Contact Drop")))
+    _set(rp, "one_broken_tackle_pct", _clean_pct(row.get("1 Broken Tackle")))
+    _set(rp, "two_plus_broken_tackle_pct", _clean_pct(row.get("2+ Broken Tackle")))
+    # Two columns, not one: RP changed the denominator between seasons (see models.py).
+    _set(rp, "in_space_pct_of_routes", _clean_pct(row.get("% of Routes")))
+    _set(rp, "in_space_pct_of_catches", _clean_pct(_first(row, "% of Catches in space", "% of Catches")))

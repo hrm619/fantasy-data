@@ -66,7 +66,8 @@ src/fantasy_data/
 │   ├── ingest_nflverse.py             # nflverse: seasonal, weekly, snap, PBP, PFR, NGS, FTN
 │   ├── ingest_pff.py                  # PFF CSV → grades enrichment (single file)
 │   ├── ingest_pff_bulk.py             # PFF per-season CSVs → bulk grade ingest (2014-2025)
-│   ├── ingest_reception_perception.py # RP film-graded WR metrics (7 CSV types)
+│   ├── ingest_reception_perception.py # RP film-graded WR metrics (7 CSV types, 2 naming schemes)
+│   ├── rp_parse.py                    # RP filename -> data type/position (pure, no I/O)
 │   ├── ingest_historical_adp.py       # Fantasy Football Calculator API → historical ADP
 │   ├── ingest_ngs.py                  # NGS CSV → baseline (legacy stub)
 │   └── id_resolver.py                 # nflverse gsis_id → pipeline PLAYER ID bridge
@@ -102,7 +103,7 @@ scripts/
 | `players` | Master identity — pipeline PLAYER ID is canonical PK | 2,344 players |
 | `coaching_staff` | HC/OC/play-caller/QB continuity by team+season | 416 records (32 × 13) |
 | `player_season_baseline` | Core table — 90+ fields: role signals, PFF grades, NGS tracking, FTN charting, rankings, ADP, fantasy output | 8,334 records (2014-2026) |
-| `wr_reception_perception` | Film-graded WR metrics from Reception Perception | 117 records |
+| `wr_reception_perception` | Film-graded WR metrics from Reception Perception | 183 records (2023-2025) |
 | `target_competition` | Intra-team route tree competition (Phase 2) | Empty |
 | `player_week` | Weekly observation layer (Phase 2) | Empty |
 | `qualitative_signals` | Expert qualitative signals (Phase 3) | Empty |
@@ -121,7 +122,7 @@ scripts/
 | nflverse FTN charting | 2022-2025 | Play-action %, screen %, true drop rate, contested/catchable ball % |
 | PFF grades (API capture) | 2014-2025 | Route grade, rush grade, offense grade, pass block, receiving grade, YPRR |
 | PFF stats (API capture) | 2014-2025 | Contested catch rate, drop rate, route participation |
-| Reception Perception | 2023-2025 | Coverage success rates, route tree, alignment, contested catch |
+| Reception Perception | 2023-2025 | Coverage success rates + attempt counts, route tree, alignment, contested catch, in-space tackle breaking |
 | Historical ADP (FFC API) | 2017-2024 | Pre-season ADP consensus |
 | Coaching staff (manual + script) | 2014-2025 | HC, OC, starting QB, continuity flags, system tags |
 
@@ -153,7 +154,8 @@ Phase 2: Historical Data (2014-2025)
   fantasy-data ingest nflverse --start-season 2014 --end-season 2025  # advanced metrics + PBP + NGS + FTN
   fantasy-data ingest pff-bulk --dir data-dev/pff-grades              # PFF grades 2014-2025
   fantasy-data ingest historical-adp                                  # ADP 2017-2024 (FFC has no 2025)
-  fantasy-data ingest rp --dir "data-dev/Reception Perception WR Deep Dive"
+  fantasy-data ingest rp --dir "data-dev/Reception Perception WR Deep Dive"   # hand-downloaded CSVs
+  fantasy-data ingest rp --dir data-dev/rp-site/csv --position WR            # site exports (fetch_rp.py)
 
 Phase 3: Draft Season (2026)
   fantasy-data ingest rankings --season 2026            # consolidate files already in update/
@@ -233,6 +235,7 @@ Or use `fantasy-data build-history` for an automated Phase 2-4 sequence.
 - `test_compute_coaching_continuity.py` — Flag/tenure derivation, play-caller vs OC-title basis, the LV regression
 - `test_reports.py` — ADP divergence filtering, rankings breakdown, variance, trust flags
 - `test_standardize.py` — Team abbreviations, player names, coach names
+- `test_ingest_rp.py` — RP filename classification (both schemes), position isolation, source precedence, falsy-zero preservation, cross-season column renames, name-collapse matching
 - `test_viz.py` — NYT theme API (apply_theme, color_for_mode, annotate_point), all 7 chart modules return `go.Figure` (requires `--extra viz`)
 
 ## Integration with quant-edge
@@ -257,7 +260,44 @@ This repo is part of the quant-edge platform. See `/Users/henrymarsh/Documents/q
 - **Historical ADP uses Fantasy Football Calculator API**: Free, no auth needed. Returns PPR ADP for 12-team leagues. URL: `fantasyfootballcalculator.com/api/v1/adp/ppr?teams=12&year=YYYY`. Note the API returns 0 players for 2025 (an upstream gap — 2024 and 2026 are fine), so 2025 has no FFC ADP.
 - **Compute baselines AFTER ingesting a season's actuals, never before**: `compute baselines --season N` writes trust-weighted projections into season N's row, and the ingest layer's no-overwrite rule then blocks the real data from ever landing. This silently stranded the whole 2025 season: the role signals were 2022-24 averages wearing a 2025 label (the tell was `dominator_rating` being NULL while `target_share` was full, since only the latter is an aggregable field). Clearing `AGGREGABLE_FIELDS` + `wopr`/`market_share_score` for that season is the fix.
 - **PFF data captured via browser network tab**: No API or CSV export. Capture JSON from PFF's internal API, then run `scripts/convert_pff_json.py` to produce CSV for ingest.
-- **Reception Perception file naming**: Pro WRs use `WR {Type} - 2023.csv` or `WR {Type} 2024-25.csv`. Draft prospects use `{Type} - 2025 Draft Prospects.csv`. The ingest handles both patterns.
+- **Reception Perception has two naming schemes, and the filename is load-bearing**: hand-downloaded
+  exports are `WR {Type} 2024-25.csv` / `{Type} - 2025 Draft Prospects.csv`; `scripts/fetch_rp.py`
+  writes `wr-2025__{type}.csv` under `data-dev/rp-site/csv/{POSITION}/`. Both are accepted, and
+  classification lives in `ingest/rp_parse.py`. **`Route Percentage` and `Success Rate by Route` have
+  byte-identical headers** (`Year, Player, Total Routes, Screen, …, Other`) — one is the share of
+  routes run, the other the success rate on them. The filename is the *only* discriminator, so a
+  misclassification is undetectable downstream: the columns parse and the values are plausible
+  percentages. `classify_type` raises rather than guessing when a name matches two types.
+- **RP CSVs must be scoped by position**: the loader used to glob `*.csv` and select on data type
+  alone, so an `RB Route Percentage` export sharing a directory with WR files merged into the WR
+  frame, keyed only on `(Player, Year)`. `_load_csvs` now takes a `position`, skips files declaring a
+  different one, and reads a `<dir>/<POSITION>/` subdirectory when present. RB charting is *run
+  concepts* (gap/zone, loaded box, run stuffs), not route charting — it does not belong in this table.
+- **RP renames columns between seasons**: tackle-breaking counts are `Opportunities` in the 2024
+  export and `In Space Opportunities` in 2025, which is why `tackle_break_opportunities` was populated
+  for 115 of 126 rows — missing exactly the 11 rows from 2025. Worse, the companion column changed
+  *denominator*: 2024 gives `% of Routes`, 2025 gives `% of Catches`. They are stored as two columns
+  (`in_space_pct_of_routes`, `in_space_pct_of_catches`) and must never be merged — that is the
+  `drop_rate` mistake. Prospect exports can use the older name in the same season as pro exports use
+  the newer one, so both readers stay live.
+- **Never assign RP fields with `or`**: the ingest used `rp.field = _clean_pct(...) or rp.field`, and
+  `0.0` is falsy — a charted zero was discarded and the previous value (or NULL) kept. Zero is a real,
+  common reading here (no screens run, no double coverage faced, no tackles broken). Use `_set`, which
+  treats only `None` as "the source said nothing".
+- **`players.full_name` and RP disagree on punctuation**: the pipeline key dict stores `Jaxon
+  SmithNjigba` / `AmonRa St Brown`; RP publishes `Jaxon Smith-Njigba` / `Amon-Ra St. Brown`.
+  `standardize_player_name` keeps hyphens, so exact matching silently dropped two of the most-charted
+  WRs. `_match_player` falls back to an alphanumeric-only key, but only where it resolves to exactly
+  one player — nicknames (`Gabe` vs `Gabriel` Davis) stay unmatched by design. Every run prints the
+  unmatched list; do not suppress it.
+- **Site exports beat hand-downloaded CSVs where both exist**: the site table is live, a CSV on disk
+  is a point-in-time copy. `_load_csvs` dedupes on (player, year, is_prospect) by `SOURCE_PRECEDENCE`
+  and the row records which won in `wr_reception_perception.source`.
+- **Adding a model column requires `sync_schema`, not just `init-db`**: `create_all()` never touches an
+  existing table, so a new `Mapped[...]` attribute is invisible to an existing DB and every query
+  against it fails with "no such column". `db.sync_schema()` (run automatically by `init-db`) issues
+  additive `ALTER TABLE ... ADD COLUMN` for anything missing. It only ever adds — no drops, renames or
+  retypes — so anything beyond an additive change still needs a hand-written migration.
 - **`seasons_in_system` = min(system tenure, player's consecutive seasons on that team)**: it caps the system's age by how long the player has actually been in it — George Kittle reads 10 for Shanahan's system; a veteran who arrived this year reads 1 no matter how old the system is. It was previously capped by `players.years_pro`, which was wrong three ways: league experience is not time on the team, one static value cannot describe every season of a career, and the field was **never populated** (`years_exp -> years_pro` is mapped only in `ingest_pff`, whose bulk CSVs lack the column), so `min(system_years, years_pro or 1)` returned **1 for every player in every season since inception**. Team tenure comes from `player_season_baseline.team`, so no new source is needed. `players.years_pro` remains unpopulated and unused — don't reintroduce it as a cap.
 - **Never hand-author continuity flags — derive them**: `compute coaching-continuity --season N` compares season N's stored names against N-1 and writes the flags plus HC/OC tenure. The 2024/2025 JSONs were hand-written, and nothing cross-checked them: Las Vegas 2025 carried the *2024* staff (Antonio Pierce / Luke Getsy) with `hc_continuity_flag = 1` straight through Pete Carroll's first year, so the ×0.65 decay never fired and Raiders trust weights ran ~4× too high (0.607 → 0.158 once corrected). Seed names only; let the command derive flags and tenure.
 - **`oc_continuity_flag` tracks the play caller, not the OC title**: the two diverge on 5 of 32 teams in 2026 alone — BUF/KC/CHI/LAR changed OC while the play-calling head coach stayed (a title diff would fire ×0.40 wrongly), and CAR kept both names while play-calling moved Canales→Idzik (a title diff would miss a real scheme change). `play_caller` is NULL for 2014-2024, and the derivation falls back to the OC title whenever either season is unknown, so historical seasons keep their original semantics. The command reports how many teams used each basis — the fallback is never silent.

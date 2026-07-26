@@ -34,6 +34,9 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+# Slug -> season lives in the package so it is unit-testable; the script only fetches.
+from fantasy_data.ingest.rp_parse import season_from_slug
+
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 
 # Politeness between profile fetches: a subscription read at human pace, not a crawl.
@@ -262,7 +265,6 @@ PROFILE_INDEXES: dict[str, str] = {
 }
 
 _PROFILE_HREF_RE = re.compile(r'href="https://receptionperception\.com/([a-z0-9\-]+-profile)/"')
-_PROFILE_SLUG_RE = re.compile(r"^(?P<name>.+)-(?P<year>\d{4})-(?P<kind>player|prospect)-profile$")
 _H1_RE = re.compile(r"<h1[^>]*>(.*?)</h1>", re.DOTALL)
 _PUBLISHED_RE = re.compile(r'<meta[^>]+property="article:published_time"[^>]+content="([^"]+)"')
 
@@ -284,27 +286,6 @@ class ProfileCapture:
     bytes: int = 0
     sha256: str = ""
     error: str = ""
-
-
-def season_from_slug(slug: str) -> tuple[int, str] | None:
-    """Return (season, kind) for a profile slug, or None if it has no parseable year.
-
-    The season is taken from the **slug**, never from the publication date: RP publishes a
-    season's profiles the following summer (the Jordan Addison *2025* profile went up on
-    2026-07-13), so `season_for_date` in knowledge-base would file every one of them a year
-    late. A wrong season here is silent — the document embeds, searches, and answers questions
-    about the wrong year.
-
-    Prospect profiles resolve to the year **before** the draft class in the slug: a "2026
-    prospect profile" charts the player's 2025 college season. That matches the quantitative
-    layer, where the 2026 prospect tables carry `Year=2025`.
-    """
-    match = _PROFILE_SLUG_RE.match(slug)
-    if not match:
-        return None
-    year = int(match.group("year"))
-    kind = match.group("kind")
-    return (year - 1 if kind == "prospect" else year), kind
 
 
 def discover_profiles(session: Any, positions: list[str]) -> list[ProfileCapture]:

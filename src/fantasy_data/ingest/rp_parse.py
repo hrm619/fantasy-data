@@ -83,6 +83,36 @@ def is_prospect_file(filename: str) -> bool:
     return "prospect" in normalized or "draft" in normalized
 
 
+# Profile post slugs. RP uses three suffixes, not two: `-player-profile` for a pro season,
+# and BOTH `-prospect-profile` and `-nfl-draft-profile` for draft classes (the 2024 QB class —
+# Caleb Williams, Jayden Daniels, Drake Maye — uses the latter).
+_PROFILE_SLUG_RE = re.compile(r"^(?P<name>.+)-(?P<year>\d{4})-(?P<kind>player|prospect|nfl-draft)-profile$")
+_PROSPECT_KINDS = {"prospect", "nfl-draft"}
+
+
+def season_from_slug(slug: str) -> tuple[int, str] | None:
+    """Return (season, kind) for a profile slug, or None if it has no parseable year.
+
+    The season comes from the **slug**, never the publication date: RP publishes a season's
+    profiles the following summer — the Jordan Addison *2025* profile went up on 2026-07-13 — so
+    `knowledge_base.seasons.season_for_date` would file every one of them a year late. That
+    failure is silent: the document embeds, searches, and answers questions about the wrong year.
+
+    Prospect profiles resolve to the year **before** the draft class in the slug, since a 2026
+    draft prospect was charted during the 2025 college season. That matches the quantitative
+    layer, where the 2026 prospect tables carry `Year=2025`.
+
+    Returns None rather than guessing for an unrecognized slug shape — callers skip and report,
+    because an unlabelled corpus entry is recoverable while a confidently mislabelled one is not.
+    """
+    match = _PROFILE_SLUG_RE.match(slug)
+    if not match:
+        return None
+    year = int(match.group("year"))
+    is_prospect = match.group("kind") in _PROSPECT_KINDS
+    return (year - 1 if is_prospect else year), ("prospect" if is_prospect else "player")
+
+
 def matches_position(filename: str, position: str) -> bool:
     """Whether a file may be read when ingesting `position`.
 

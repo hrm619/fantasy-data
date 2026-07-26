@@ -22,6 +22,7 @@ from fantasy_data.ingest.ingest_reception_perception import (
 )
 from fantasy_data.ingest.rp_parse import (
     RPClassificationError,
+    season_from_slug,
     classify_type,
     detect_position,
     is_prospect_file,
@@ -29,6 +30,16 @@ from fantasy_data.ingest.rp_parse import (
     normalize_name,
 )
 from fantasy_data.models import Base, Player, WrReceptionPerception
+
+
+def season_for_date(published_at: str) -> int:
+    """Mirror of knowledge_base.seasons.season_for_date (separate repo, not importable).
+
+    Kept here so the test can assert the two disagree — which is the whole reason profile
+    seasons are parsed from the slug.
+    """
+    year, month = int(published_at[:4]), int(published_at[5:7])
+    return year if month >= 3 else year - 1
 
 
 @pytest.fixture
@@ -286,3 +297,39 @@ class TestIngestEndToEnd:
         ingest_reception_perception(session, str(tmp_path), verbose=False)
         ingest_reception_perception(session, str(tmp_path), verbose=False)
         assert session.query(WrReceptionPerception).count() == 1
+
+
+class TestProfileSlugSeason:
+    """Profile season comes from the slug, never the publication date."""
+
+    @pytest.mark.parametrize(
+        "slug,expected",
+        [
+            # pro seasons
+            ("jordan-addison-2025-player-profile", (2025, "player")),
+            ("a-j-brown-2024-player-profile", (2024, "player")),
+            ("aaron-rodgers-2022-player-profile", (2022, "player")),
+            # draft classes chart the PRIOR college season
+            ("bhayshul-tuten-2025-prospect-profile", (2024, "prospect")),
+            ("adam-randall-2026-prospect-profile", (2025, "prospect")),
+            # RP's third slug shape — the 2024 QB draft class uses -nfl-draft-profile
+            ("caleb-williams-2024-nfl-draft-profile", (2023, "prospect")),
+            ("j-j-mccarthy-2024-nfl-draft-profile", (2023, "prospect")),
+            ("michael-penix-jr-2024-nfl-draft-profile", (2023, "prospect")),
+        ],
+    )
+    def test_season_and_kind_from_slug(self, slug, expected):
+        assert season_from_slug(slug) == expected
+
+    def test_publication_date_is_not_the_season(self):
+        """The 2025 Addison profile was published 2026-07-13; it is 2025 content."""
+        season, _ = season_from_slug("jordan-addison-2025-player-profile")
+        assert season == 2025
+        assert season != season_for_date("2026-07-13")
+
+    @pytest.mark.parametrize(
+        "slug",
+        ["player-profiles-2", "matt-harmons-dynasty-rankings-tool", "some-player-profile", "no-year-prospect-profile"],
+    )
+    def test_unparseable_slug_returns_none_rather_than_guessing(self, slug):
+        assert season_from_slug(slug) is None

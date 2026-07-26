@@ -21,5 +21,16 @@ mkdir -p "$DEST_DIR"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 DEST="$DEST_DIR/fantasy_data-$TIMESTAMP.db"
 
+# VACUUM INTO refuses to overwrite, and the timestamp only resolves to the second — so two
+# runs in the same second abort with sqlite's opaque "stepping, output file already exists".
+# That is not hypothetical: refresh.sh snapshots on every run, and an aborting snapshot takes
+# the whole refresh down before it ingests anything. Never overwrite a backup; just take the
+# next free name.
+SUFFIX=2
+while [ -e "$DEST" ]; do
+  DEST="$DEST_DIR/fantasy_data-$TIMESTAMP-$SUFFIX.db"
+  SUFFIX=$((SUFFIX + 1))
+done
+
 sqlite3 "$DB_PATH" "VACUUM INTO '$DEST'"
 echo "Backed up $DB_PATH -> $DEST"

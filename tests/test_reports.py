@@ -75,6 +75,30 @@ class TestAdpDivergence:
         results = get_adp_divergence(session, 2024)
         assert len(results) == 0
 
+    def test_threshold_is_a_real_cutoff_not_a_truthy_flag(self, session, seed_players, seed_baselines):
+        # adp_divergence_flag is fixed at >=12 from ingest; a caller passing threshold=25
+        # must not get the >=12 rows back — threshold has to reach the actual gap.
+        b = session.get(PlayerSeasonBaseline, "HillTy01_2024")
+        b.sharp_pos_rank = 3.0
+        b.adp_positional_rank = 18
+        b.adp_divergence_pos = 15.0
+        b.adp_divergence_flag = 1
+        session.commit()
+
+        assert get_adp_divergence(session, 2024, threshold=12) == get_adp_divergence(session, 2024, threshold=15)
+        assert get_adp_divergence(session, 2024, threshold=25) == []
+        assert len(get_adp_divergence(session, 2024, threshold=0)) == 1
+
+    def test_count_below_min_sources_applies_the_same_real_threshold(self, session, seed_players, seed_baselines):
+        b = session.get(PlayerSeasonBaseline, "HillTy01_2024")
+        b.adp_divergence_pos = 15.0
+        b.adp_divergence_flag = 1
+        b.rankings_source_count = 2
+        session.commit()
+
+        assert count_below_min_sources(session, 2024, threshold=12) == 1
+        assert count_below_min_sources(session, 2024, threshold=25) == 0
+
 
 class TestPlayerRankings:
     def test_returns_source_breakdown(self, session, seed_players, seed_baselines):

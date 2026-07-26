@@ -1,5 +1,6 @@
 """ADP divergence report — players where sharp consensus disagrees with ADP."""
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from tabulate import tabulate
 
@@ -32,9 +33,13 @@ def get_adp_divergence(
     limit: int = 50,
     min_sources: int = DEFAULT_MIN_SOURCES,
 ) -> list[dict]:
-    """Get players with ADP divergence above threshold.
+    """Get players with |ADP divergence| >= threshold.
 
     Returns list of dicts sorted by absolute divergence descending.
+
+    `threshold` is a real cutoff on `abs(adp_divergence_pos)`, not the stored
+    `adp_divergence_flag` (which is fixed at >=12 from ingest and only used as an
+    index-friendly pre-filter here). Pass 0 to disable and see every player.
 
     `min_sources` drops players whose sharp consensus rests on fewer than that
     many ranking sources. Pass 0 to disable and see every player.
@@ -52,7 +57,7 @@ def get_adp_divergence(
         query = query.filter(Player.position == position.upper())
 
     if threshold:
-        query = query.filter(PlayerSeasonBaseline.adp_divergence_flag == 1)
+        query = query.filter(func.abs(PlayerSeasonBaseline.adp_divergence_pos) >= threshold)
 
     if min_sources:
         query = query.filter(PlayerSeasonBaseline.rankings_source_count >= min_sources)
@@ -103,7 +108,7 @@ def count_below_min_sources(
     if position and position.upper() != "ALL":
         query = query.filter(Player.position == position.upper())
     if threshold:
-        query = query.filter(PlayerSeasonBaseline.adp_divergence_flag == 1)
+        query = query.filter(func.abs(PlayerSeasonBaseline.adp_divergence_pos) >= threshold)
 
     return query.count()
 

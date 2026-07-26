@@ -1,5 +1,7 @@
 """ADP divergence report — players where sharp consensus disagrees with ADP."""
 
+from typing import Any
+
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from tabulate import tabulate
@@ -64,7 +66,14 @@ def get_adp_divergence(
 
     rows = query.all()
 
-    results = []
+    # Annotated rather than inferred. Left bare, ty derives the value type from the
+    # literals below — a union that includes `str` (from `player`/`pos`/`direction`) —
+    # and then rejects `abs()` on `x["divergence"]` in the sort key, because a `str`
+    # could reach it. `dict[str, Any]` is the honest type here and matches the declared
+    # return: the rows are an open contract read by the viz layer and quant-edge-mcp
+    # (viz probes an optional `player_id` no row currently carries), so a TypedDict
+    # would over-close them. Not a change of shape or keys.
+    results: list[dict[str, Any]] = []
     for player, baseline in rows:
         div_pos = baseline.adp_divergence_pos
         direction = "UNDER" if div_pos and div_pos > 0 else "OVER"

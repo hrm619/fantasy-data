@@ -29,13 +29,23 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install package with dev + viz dependencies
-        # setup-uv already provisions the Python + virtual environment.
+        # `uv sync --frozen`, NOT `uv pip install -e .` — the latter ignores uv.lock and re-resolves
+        # from pyproject's ranges, so CI and every local `.venv` ran different tool versions. That
+        # drift is not theoretical: CI resolved ty 0.0.63 against a locally-synced 0.0.49 and failed
+        # the type gate on two diagnostics that were green for everyone locally. Developers run the
+        # gates through `uv run` (directly or via pre-commit), which reads the lock; CI now does too,
+        # so the two agree by construction and a tool upgrade arrives as a committed lock diff.
+        # `--frozen` installs the lock as-is without re-resolving. The tradeoff is the editable
+        # sibling above: if fantasy_data_pipeline's HEAD adds a dependency, the stale lock omits it
+        # and CI fails on import — fix by running `uv lock` locally and committing, not by dropping
+        # the flag.
+        #
         # The viz extra (plotly/scipy/kaleido) is included so tests/test_viz.py runs.
         # `scrape` is needed even though CI never drives a browser: `ty check scripts/` resolves
         # the playwright import in scripts/fetch_rp.py, and an unresolved import is a hard error.
         # Installing the extra pulls one wheel; browser binaries only arrive via `playwright
         # install`, which CI does not run. Mirrors fantasy_data_pipeline's ".[dev,headless]".
-        run: uv pip install -e ".[dev,viz,scrape]"
+        run: uv sync --frozen --extra dev --extra viz --extra scrape
 
       - name: Lint (ruff)
         run: uv run ruff check src/ scripts/ tests/

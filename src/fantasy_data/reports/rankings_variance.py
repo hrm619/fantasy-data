@@ -1,6 +1,7 @@
 """Cross-source disagreement report — high variance = market uncertainty."""
 
 import math
+from typing import Any
 
 from sqlalchemy.orm import Session
 from tabulate import tabulate
@@ -31,7 +32,10 @@ def get_rankings_variance(
     if position and position.upper() != "ALL":
         query = query.filter(Player.position == position.upper())
 
-    results = []
+    # Annotated, not inferred — same reason as reports/adp_divergence.py: inferred from
+    # the literals the value type is a union including `str` (`player`, `range`), which
+    # makes `x["std_dev"]` unsortable. The rows stay an open `dict[str, Any]` contract.
+    results: list[dict[str, Any]] = []
     for player, baseline in query.all():
         ranks = [
             baseline.rankings_fpts_positional,

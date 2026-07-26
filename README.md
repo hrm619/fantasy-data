@@ -1,6 +1,8 @@
 # fantasy-data
 
-Fantasy football data model, ETL, and edge identification for the [quant-edge](https://github.com/hrm619) platform.
+The canonical fantasy-football data store in [quant-edge](https://github.com/hrm619/quant-edge),
+a local fantasy-football research system: data model, ETL, and edge identification. Sole writer
+of `~/.fantasy-data/fantasy_data.db`; `quant-edge-mcp` reads it read-only and serves it to Claude.
 
 ## What This Does
 

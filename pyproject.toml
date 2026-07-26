@@ -11,7 +11,7 @@ fantasy-pipeline = { path = "../fantasy_data_pipeline", editable = true }
 [project]
 name = "fantasy-data"
 version = "0.1.0"
-description = "Fantasy football data model, ETL, and edge identification for the quant-edge platform"
+description = "Fantasy football data model, ETL, and edge identification — the canonical data store in quant-edge, a local fantasy-football research system"
 readme = "README.md"
 authors = [
     {name = "Henry Marsh"},
@@ -59,7 +59,7 @@ scrape = [
 fantasy-data = "fantasy_data.cli:cli"
 
 [project.urls]
-Repository = "https://github.com/henrymarsh/fantasy-data"
+Repository = "https://github.com/hrm619/fantasy-data"
 
 [tool.pytest.ini_options]
 # `integration` tests read the gitignored data-dev/ captures and skip when absent, so a plain

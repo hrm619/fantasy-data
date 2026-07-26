@@ -42,8 +42,11 @@ viz = [
     "scipy>=1.11.0",
 ]
 # Browser automation for `scripts/fetch_rp.py` (Reception Perception exports). Deliberately
-# optional: nothing in src/ imports it, so the installed package and CI never need a browser.
-# Session/auth is reused from fantasy_pipeline.scraper.auth — see RP_SOURCE_PLAN.md §5.1.
+# optional: nothing in src/ imports it, so the installed package never needs a browser. CI does
+# install this extra — not to drive a browser, but because `ty check scripts/` must resolve the
+# playwright import; the wheel alone satisfies that, and browsers only arrive via
+# `playwright install`, which CI never runs.
+# Session/auth is reused from fantasy_pipeline.scraper.auth — see ../RP_SOURCE_PLAN.md §5.1.
 # Pinned to the same minor as fantasy_data_pipeline's 'headless' extra so both repos drive the
 # same cached Chromium build. Unpinned, uv resolves a newer Playwright here that demands a
 # browser revision the shared ~/Library/Caches/ms-playwright doesn't have, forcing a redundant

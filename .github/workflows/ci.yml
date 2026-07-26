@@ -31,7 +31,11 @@ jobs:
       - name: Install package with dev + viz dependencies
         # setup-uv already provisions the Python + virtual environment.
         # The viz extra (plotly/scipy/kaleido) is included so tests/test_viz.py runs.
-        run: uv pip install -e ".[dev,viz]"
+        # `scrape` is needed even though CI never drives a browser: `ty check scripts/` resolves
+        # the playwright import in scripts/fetch_rp.py, and an unresolved import is a hard error.
+        # Installing the extra pulls one wheel; browser binaries only arrive via `playwright
+        # install`, which CI does not run. Mirrors fantasy_data_pipeline's ".[dev,headless]".
+        run: uv pip install -e ".[dev,viz,scrape]"
 
       - name: Lint (ruff)
         run: uv run ruff check src/ scripts/ tests/

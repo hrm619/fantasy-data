@@ -1,6 +1,6 @@
 """Fetch Reception Perception's sortable charting tables as CSV (Layer 0 capture).
 
-Phase 1 of RP_SOURCE_PLAN.md. Drives the site's own wpDataTables CSV export button in an
+Phase 1 of ../RP_SOURCE_PLAN.md. Drives the site's own wpDataTables CSV export button in an
 authenticated browser and saves the result verbatim, plus a manifest. **Writes no database
 rows** — parsing and loading happen offline, against these bytes, in a later phase.
 
@@ -58,7 +58,7 @@ class Page:
 
     `season` is the NFL season the page covers. For WR/RB it is belt-and-braces — those tables
     carry their own `Year` column, which the ingest should prefer. For **QB it is the only
-    source of season**: tables 654/659/660 ship no Year column (RP_SOURCE_PLAN.md §2.1), so a
+    source of season**: tables 654/659/660 ship no Year column (../RP_SOURCE_PLAN.md §2.1), so a
     page-level value is the sole thing standing between us and a mislabelled season.
     """
 
@@ -71,7 +71,7 @@ class Page:
 
 # Probed from the site's public nav 2026-07-25. Two further pages exist but are gated above
 # this subscription tier and are deliberately absent: /nfl-data-full-history/ (WR, all seasons)
-# and /college-sortable-data-2024/. See RP_SOURCE_PLAN.md §11 — do not add them back without
+# and /college-sortable-data-2024/. See ../RP_SOURCE_PLAN.md §11 — do not add them back without
 # confirming the entitlement, or the fetcher will "succeed" with teaser pages.
 PAGES: tuple[Page, ...] = (
     Page("wr-2025", "https://receptionperception.com/nfl-wr-sortable-data-2025-26/", "WR", 2025),

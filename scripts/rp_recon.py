@@ -1,6 +1,6 @@
 """Phase 0 recon for the Reception Perception (`rp`) source — read-only, no DB writes.
 
-Answers the questions RP_SOURCE_PLAN.md §2 leaves open, which cannot be answered from
+Answers the questions ../RP_SOURCE_PLAN.md §2 leaves open, which cannot be answered from
 outside the paywall:
 
   1. Are the wpDataTables tables **client-side** (every row already in the HTML, so a plain
@@ -164,7 +164,7 @@ def _session() -> requests.Session:
     """Build a requests session carrying the saved `rp` browser cookies.
 
     Reuses `fantasy_pipeline.scraper.auth` rather than standing up a second session store —
-    see RP_SOURCE_PLAN.md §5.1. WordPress serves these pages server-side, so cookies plus
+    see ../RP_SOURCE_PLAN.md §5.1. WordPress serves these pages server-side, so cookies plus
     plain HTTP are enough; no browser needed for recon.
     """
     try:
@@ -284,7 +284,7 @@ def _print_report(results: list[PageRecon]) -> None:
         # and 2024 college pages. Do not send the reader to re-login over this.
         print(f"  ⚠ {len(paywalled)} page(s) gated while {len(ok)} unlocked on the SAME session:")
         print(f"    {paywalled}")
-        print("    That is a subscription-tier gap, not an expired login — see RP_SOURCE_PLAN.md §11.")
+        print("    That is a subscription-tier gap, not an expired login — see ../RP_SOURCE_PLAN.md §11.")
 
     data_pages = [r for r in results if not r.key.startswith("profile-") and not r.error]
     with_rows = [r for r in data_pages if any(t["tbody_rows"] > 1 for t in r.tables)]
@@ -293,7 +293,7 @@ def _print_report(results: list[PageRecon]) -> None:
         print("     An authenticated GET is the whole extraction — no AJAX, no browser.")
     else:
         print("  → SERVER-SIDE: no rows in the HTML; pull via admin-ajax.php?action=get_wdtable")
-        print("     using the table ids and nonce above (see RP_SOURCE_PLAN.md §5.2).")
+        print("     using the table ids and nonce above (see ../RP_SOURCE_PLAN.md §5.2).")
 
     exports = [r.key for r in data_pages if r.export_hints]
     print(f"  Export-button hints in static HTML: {exports or 'none'}")

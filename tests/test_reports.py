@@ -1,6 +1,6 @@
 """Tests for report modules."""
 
-from fantasy_data.models import PlayerSeasonBaseline
+from fantasy_data.models import Player, PlayerSeasonBaseline
 from fantasy_data.reports.adp_divergence import count_below_min_sources, get_adp_divergence
 from fantasy_data.reports.rankings import get_player_rankings
 from fantasy_data.reports.rankings_variance import get_rankings_variance
@@ -117,3 +117,28 @@ class TestTrustFlags:
     def test_no_flags(self, session, seed_players, seed_baselines):
         results = get_trust_flags(session, 2024)
         assert len(results) == 0  # No flags set without running compute
+
+
+class TestRankingsRequiresRankingData:
+    """A baseline row exists for ~4x more players than any source ranks, so keying on the row's
+    existence returned an all-null 'profile' for 795 players in 2026 alone."""
+
+    def _seed(self, session, **ranking_fields):
+        session.add(Player(player_id="P1", full_name="Test Player", position="WR", team="AAA"))
+        session.add(PlayerSeasonBaseline(baseline_id="P1_2026", player_id="P1", season=2026, **ranking_fields))
+        session.commit()
+
+    def test_unranked_player_returns_none(self, session):
+        self._seed(session)  # baseline row, no ranking data
+        assert get_player_rankings(session, "P1", 2026) is None
+
+    def test_ranked_player_still_returns_data(self, session):
+        self._seed(session, sharp_pos_rank=4.0, rankings_source_count=4)
+        data = get_player_rankings(session, "P1", 2026)
+        assert data is not None
+        assert data["player"] == "Test Player"
+
+    def test_adp_only_player_still_returns_data(self, session):
+        """Partial coverage is real coverage — don't require all three."""
+        self._seed(session, adp_positional_rank=12)
+        assert get_player_rankings(session, "P1", 2026) is not None

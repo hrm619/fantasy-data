@@ -5,12 +5,22 @@ from tabulate import tabulate
 
 from fantasy_data.models import Player, PlayerSeasonBaseline
 
-# Sharp consensus is a mean of per-source positional ranks, so a player covered
-# by few sources has a noisier mean and lands further from ADP for reasons that
-# are variance, not disagreement. On the 2026 board, 2-source players averaged
-# 30.5 absolute divergence against 5.0 for 4-source players — 6x — which put 9
-# of the 11 two-source players in the top 20. Sorting by divergence alone
-# therefore surfaces the least-supported players as the strongest edges.
+# THE authoritative statement of why this filter exists. MCP_GUIDE.md and
+# fantasy-data/CLAUDE.md point here rather than restating it — three copies of the
+# same measured figures drifted apart once already, because a board refresh moves
+# the numbers and nothing recomputes the prose.
+#
+# Sharp consensus is a mean of per-source positional ranks, so a player covered by
+# few sources has a noisier mean and lands further from ADP for reasons that are
+# variance, not disagreement. Measured on the 2026 board, thinly-covered players
+# diverge roughly **5x** more than fully-covered ones, and the handful of 1-2
+# source players crowd the top of any list sorted by divergence alone — so that
+# sort surfaces the least-supported players as the strongest edges.
+#
+# The ratio moves with every refresh; the conclusion does not. To recheck it:
+#   fantasy-data report adp-divergence --season <yr> --min-sources 0
+# then compare mean absolute divergence grouped by `sources`. Quote the shape, not
+# a digit, unless you have just recomputed it.
 DEFAULT_MIN_SOURCES = 3
 
 
